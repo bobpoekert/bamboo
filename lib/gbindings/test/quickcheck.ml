@@ -1,3 +1,6 @@
+open OUnit
+open Gbindings
+
 
 let test_roundtrip typ typ_name encoder decoder = 
     QCheck.Test.make ~count:10000
@@ -11,7 +14,6 @@ let test_roundtrip_float typ typ_name encoder decoder =
 
 let roundtrip_tests = 
     let open QCheck in 
-    let open Gbindings in
     let ui64 = set_gen Gen.ui64 int64 in 
     [
         test_roundtrip bool "boolean" g_value_of_boolean boolean_of_g_value;
@@ -30,16 +32,19 @@ let roundtrip_tests =
         test_roundtrip ui64 "uint64" g_value_of_uint64 uint64_of_g_value;
     ]
 
-(*
-let _ = 
-    let open OUnit in 
-    run_test_tt_main (
-        "roundtrips" >::: (List.map QCheck_ounit.to_ounit_test roundtrip_tests))
-        *)
+let test_type_name _test_ctx = 
+    let name = "GObject" in
+    let t = g_type_of_name name in 
+    let n = g_type_name t in 
+    assert_equal name n
 
 let () = 
+    let _ = run_test_tt_main (
+        "object" >::: [
+            "type nane" >:: test_type_name;
+        ]
+    ) in
     List.iter QCheck.Test.check_exn roundtrip_tests
-
 
 
 

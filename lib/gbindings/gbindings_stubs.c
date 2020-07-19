@@ -123,7 +123,7 @@ CAMLprim value gcaml_type_of_name(value v_name) {
 CAMLprim value gcaml_type_of_value(value v_v) {
     CAMLparam1(v_v);
     GValue *gv = unbox_g_value(v_v);
-    GType typ = g_value_get_gtype(gv);
+    GType typ = G_VALUE_TYPE(gv);
     CAMLreturn(Val_int(typ));
 }
 
