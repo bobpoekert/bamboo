@@ -1,0 +1,3 @@
+(test
+    (name quickcheck)
+    (libraries gbindings qcheck-ounit))
