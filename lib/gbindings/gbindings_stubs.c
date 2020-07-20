@@ -1,6 +1,7 @@
 #include <glib.h>
 #include <glib-object.h>
 #include <gobject/gvaluecollector.h>
+#include <gtk/gtk.h>
 
 #include <caml/mlvalues.h>
 #include <caml/memory.h>
@@ -47,7 +48,7 @@ typedef struct gcaml_gobject_box {
     GObject *obj;
 } gcaml_gobject_box;
 
-#define unbox_g_object(v) (((gcaml_gobject_box *) Data_custom_val(v))->obj)
+#define unbox_g_object(v) G_OBJECT(((gcaml_gobject_box *) Data_custom_val(v))->obj)
 
 void gcaml_gobject_release(value object_wrapper) {
     gcaml_gobject_box *box = (gcaml_gobject_box *) Data_custom_val(object_wrapper);
@@ -321,4 +322,113 @@ CAMLprim value gcaml_g_type_of_g_value(value v_val) {
     GValue *gv = unbox_g_value(v_val);
     GType type = G_VALUE_TYPE(gv);
     CAMLreturn(Val_int(type));
+}
+
+CAMLprim value gcaml_object_set_property(value v_obj, value v_name, value v_val) {
+    CAMLparam3(v_obj, v_name, v_val);
+    GObject *obj = unbox_g_object(v_obj);
+    const char *name = String_val(v_name);
+    GValue *val = unbox_g_value(v_val);
+
+    g_object_set_property(obj, name, val);
+
+    CAMLreturn(Val_unit);
+}
+
+CAMLprim value gcaml_object_get_property(value v_obj, value v_name, value v_typ) {
+    CAMLparam3(v_obj, v_name, v_typ);
+    CAMLlocal1(res);
+    GObject *obj = unbox_g_object(v_obj);
+    const char *name = String_val(v_name);
+    GType typ = unbox_g_type(v_typ);
+    res = alloc_g_value(v_typ);
+    
+    g_object_get_property(obj, name, unbox_g_value(res));
+
+    CAMLreturn(res);
+}
+
+CAMLprim value gcaml_object_get_property_type(value v_obj, value v_name) {
+    CAMLparam2(v_obj, v_name);
+    CAMLlocal1(res);
+    GObject *obj = unbox_g_object(v_obj);
+    const char *name = String_val(v_name);
+
+    GObjectClass *cls = G_OBJECT_CLASS(obj);
+    GParamSpec *prop = g_object_class_find_property(cls, name);
+
+    if (!prop) caml_failwith("Property not found");
+
+    GType typ = prop->value_type;
+
+    g_param_spec_unref(prop);
+
+    CAMLreturn(box_g_type(typ));
+}
+
+CAMLprim value gcaml_container_append_child(value v_parent, value v_child) {
+    CAMLparam2(v_parent, v_child);
+
+    GtkContainer *parent = (GtkContainer *) unbox_g_object(v_parent);
+    GtkWidget *child = (GtkWidget *) unbox_g_object(v_child);
+
+    gtk_container_add(parent, child);
+
+    CAMLreturn(Val_unit);
+}
+
+CAMLprim value gcaml_container_remove_child(value v_parent, value v_child) {
+    CAMLparam2(v_parent, v_child);
+
+    GtkContainer *parent = (GtkContainer *) unbox_g_object(v_parent);
+    GtkWidget *child = (GtkWidget *) unbox_g_object(v_child);
+
+    gtk_container_remove(parent, child);
+
+    CAMLreturn(Val_unit);
+}
+
+CAMLprim value gcaml_widget_set_name(value v_widg, value v_name) {
+    CAMLparam2(v_widg, v_name);
+
+    GtkWidget *widg = (GtkWidget *) unbox_g_object(v_widg);
+    const char *name = String_val(v_name);
+
+    gtk_widget_set_name(widg, name);
+
+    CAMLreturn(Val_unit);
+}
+
+CAMLprim value gcaml_widget_get_name(value v_widg) {
+    CAMLparam1(v_widg);
+    CAMLlocal1(res);
+
+    GtkWidget *widg = (GtkWidget *) unbox_g_object(v_widg);
+    const char *name = gtk_widget_get_name(widg);
+
+    res = caml_copy_string(name);
+
+    CAMLreturn(res);
+}
+
+CAMLprim value gcaml_object_cast_to_widget(value v_widg) {
+    CAMLparam1(v_widg);
+    
+    GObject *obj = unbox_g_object(v_widg);
+
+    if (!G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_WIDGET))
+        caml_failwith("Type error: illegal cast to GtkWidget");
+
+    CAMLreturn(v_widg);
+}
+
+CAMLprim value gcaml_object_cast_to_container(value v_widg) {
+    CAMLparam1(v_widg);
+    
+    GObject *obj = unbox_g_object(v_widg);
+
+    if (!G_TYPE_CHECK_INSTANCE_TYPE(obj, GTK_TYPE_CONTAINER))
+        caml_failwith("Type error: illegal cast to GtkContainer");
+
+    CAMLreturn(v_widg);
 }

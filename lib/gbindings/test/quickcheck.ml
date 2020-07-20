@@ -38,10 +38,15 @@ let test_type_name _test_ctx =
     let n = g_type_name t in 
     assert_equal name n
 
+let test_object_construct _text_ctx = 
+    let typ = g_type_of_name "GObject" in 
+    let _obj = object_new typ in ()
+
 let () = 
     let _ = run_test_tt_main (
         "object" >::: [
-            "type nane" >:: test_type_name;
+            "type name" >:: test_type_name;
+            "construct" >:: test_object_construct;
         ]
     ) in
     List.iter QCheck.Test.check_exn roundtrip_tests

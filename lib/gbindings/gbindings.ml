@@ -2,6 +2,8 @@ type g_value
 type g_type
 type g_pointer
 type g_object
+type g_widget
+type g_container
 
 external g_type_name : g_type -> string = "gcaml_type_name"
 external g_type_of_name : string -> g_type = "gcaml_type_of_name"
@@ -52,4 +54,24 @@ external flags_of_g_value : g_value -> int = "gcaml_flags_of_g_value"
 external g_type_of_g_value : g_value -> g_type = "gcaml_g_type_of_g_value"
 
 external object_new : g_type -> g_object = "gcaml_object_new"
+
+let object_new_by_name name = 
+    g_type_of_name name
+    |> object_new
+
 external object_unref : g_object -> unit = "gcaml_object_unref"
+
+external object_get_property_type : g_object -> string -> g_type = "gcaml_object_get_property_type"
+external object_set_property : g_object -> string -> g_value = "gcaml_object_set_property"
+external object_get_property_of_type : g_object -> string -> g_type -> g_value = "gcaml_object_get_property"
+
+external object_cast_to_widget : g_object -> g_widget = "gcaml_object_cast_to_widget"
+external widget_cast_to_object : g_widget -> g_object = "%identity"
+
+external widget_set_name : g_widget -> string -> unit = "gcaml_widget_set_name"
+external widget_get_name : g_widget -> string = "gcaml_widget_get_name"
+
+external object_cast_to_container : g_object -> g_container = "gcaml_object_cast_to_container"
+external container_cast_to_object : g_container -> g_object = "%identity"
+external container_add_child : g_container -> g_container -> string -> unit = "gcaml_container_append_child"
+external container_remove_child : g_container -> g_container -> unit = "gcaml_container_remove_child"
