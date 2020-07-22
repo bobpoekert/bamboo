@@ -76,8 +76,17 @@ value gcaml_box_gobject(GObject *v) {
     return res;
 }
 
-#define unbox_g_type(t) ((GType) Int_val(t))
-#define box_g_type Val_int
+value box_g_type(GType typ) {
+    value res = caml_alloc(sizeof(GType), 0);
+    GType *typ_v = Data_custom_val(res);
+    *typ_v = typ;
+    return res;
+}
+
+GType unbox_g_type(value v_typ) {
+    return *((GType *) Data_custom_val(v_typ));
+}
+
 
 CAMLprim value gcaml_object_new(value v_type) {
 
@@ -106,9 +115,9 @@ CAMLprim value gcaml_object_unref(value object) {
 CAMLprim value gcaml_type_name(value v_type) {
     CAMLparam1(v_type);
     CAMLlocal1(res);
-    GType type = Int_val(v_type);
+    GType type = unbox_g_type(v_type);
     const char *name = g_type_name(type);
-    if (!name) caml_failwith("Type not found");
+    if (!name) caml_failwith("GType not found");
     res = caml_copy_string(name);
     CAMLreturn(res);
 }
@@ -117,15 +126,17 @@ CAMLprim value gcaml_type_of_name(value v_name) {
     CAMLparam1(v_name);
     const char *name = String_val(v_name);
     GType type = g_type_from_name(name);
-    if (!type) caml_failwith("Type not found");
-    CAMLreturn(Val_int(type));
+    if (!type) caml_failwith("GType not found");
+    CAMLreturn(box_g_type(type));
 }
 
 CAMLprim value gcaml_type_of_value(value v_v) {
     CAMLparam1(v_v);
+    CAMLlocal1(res);
     GValue *gv = unbox_g_value(v_v);
     GType typ = G_VALUE_TYPE(gv);
-    CAMLreturn(Val_int(typ));
+    res = box_g_type(typ);
+    CAMLreturn(res);
 }
 
 CAMLprim value gcaml_g_value_of_boolean(value v_boolean) {
@@ -363,7 +374,8 @@ CAMLprim value gcaml_object_get_property_type(value v_obj, value v_name) {
 
     g_param_spec_unref(prop);
 
-    CAMLreturn(box_g_type(typ));
+    res = box_g_type(typ);
+    CAMLreturn(res);
 }
 
 CAMLprim value gcaml_container_append_child(value v_parent, value v_child) {
@@ -431,4 +443,26 @@ CAMLprim value gcaml_object_cast_to_container(value v_widg) {
         caml_failwith("Type error: illegal cast to GtkContainer");
 
     CAMLreturn(v_widg);
+}
+
+CAMLprim value gcaml_init(value v_argc, value v_argv) {
+    CAMLparam2(v_argc, v_argv);
+
+    int argc = Int_val(v_argc);
+    char **argv = malloc(sizeof(char *) * argc);
+    for (size_t i=0; i < argc; i++) {
+        const char *instring = String_val(Field(v_argv, i));
+        size_t size = strlen(instring); /* DRAGONS: I know, I know.*/
+        char *newstring = malloc(size);
+        memcpy(newstring, instring, size);
+        argv[i] = newstring;
+    }
+
+    gtk_init(&argc, &argv);
+
+    /* we're deliberately not freeing argv because gtk_init expects us not to 
+     * this function should only ever be called once so it's not a memory leak
+     * */
+
+    CAMLreturn(Val_unit);
 }

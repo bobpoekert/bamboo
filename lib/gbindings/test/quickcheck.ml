@@ -1,7 +1,6 @@
 open OUnit
 open Gbindings
 
-
 let test_roundtrip typ typ_name encoder decoder = 
     QCheck.Test.make ~count:10000
         ~name:(Printf.sprintf "%s_roundtrip" typ_name)
@@ -12,10 +11,24 @@ let test_roundtrip_float typ typ_name encoder decoder =
         ~name:(Printf.sprintf "%s_roundtrip" typ_name)
         typ (fun v -> (abs_float (decoder (encoder v)) -. v) < 0.5)
 
+        (*
+let test_widget_set_name = 
+    let open QCheck in
+    let typ = g_type_of_name "GtkWidget" in 
+    let _ = Printf.printf "%s" (g_type_name typ) in
+    let tester n = 
+        let obj = object_new typ in 
+        let widg = object_cast_to_widget obj in 
+        widget_set_name widg n;
+        String.equal n (widget_get_name widg) in 
+    QCheck.Test.make ~count:10000 ~name:"widget_name" string tester
+    *)
+
 let roundtrip_tests = 
     let open QCheck in 
     let ui64 = set_gen Gen.ui64 int64 in 
     [
+        (*test_widget_set_name;*)
         test_roundtrip bool "boolean" g_value_of_boolean boolean_of_g_value;
         test_roundtrip (-127 -- 127) "char" g_value_of_char char_of_g_value;
         test_roundtrip (int_bound 255) "uchar" g_value_of_uchar uchar_of_g_value;
@@ -33,7 +46,7 @@ let roundtrip_tests =
     ]
 
 let test_type_name _test_ctx = 
-    let name = "GObject" in
+    let name = "GtkWidget" in
     let t = g_type_of_name name in 
     let n = g_type_name t in 
     assert_equal name n
