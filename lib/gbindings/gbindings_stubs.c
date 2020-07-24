@@ -96,6 +96,8 @@ CAMLprim value gcaml_object_new(value v_type) {
     GType type = unbox_g_type(v_type);
     GObject *res = g_object_new_with_properties(type, 0, NULL, NULL);
 
+    g_object_ref_sink(res);
+
     v_res = gcaml_box_gobject(res);
     CAMLreturn(v_res);
 }
@@ -459,10 +461,13 @@ CAMLprim value gcaml_init(value v_argc, value v_argv) {
     }
 
     gtk_init(&argc, &argv);
-
-    /* we're deliberately not freeing argv because gtk_init expects us not to 
+    /* we're deliberately not freeing argv because gtk_init expects us not to.
      * this function should only ever be called once so it's not a memory leak
      * */
+
+    /* TODO: get rid of this and register the types we use with girepository */
+    gtk_test_register_all_types();
+
 
     CAMLreturn(Val_unit);
 }
