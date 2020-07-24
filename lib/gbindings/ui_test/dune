@@ -1,0 +1,3 @@
+(executable
+    (name ui_test)
+    (libraries gbindings lwt_glib))

@@ -63,7 +63,7 @@ let object_new_by_name name =
 external object_unref : g_object -> unit = "gcaml_object_unref"
 
 external object_get_property_type : g_object -> string -> g_type = "gcaml_object_get_property_type"
-external object_set_property : g_object -> string -> g_value = "gcaml_object_set_property"
+external object_set_property : g_object -> string -> g_value -> unit = "gcaml_object_set_property"
 external object_get_property_of_type : g_object -> string -> g_type -> g_value = "gcaml_object_get_property"
 
 external object_cast_to_widget : g_object -> g_widget = "gcaml_object_cast_to_widget"
@@ -77,10 +77,12 @@ let widget_set_name w n =
 
 let widget_get_name w = Scanf.unescaped (inner_widget_get_name w)
 
+external widget_show : g_widget -> unit = "gcaml_widget_show"
+
 external object_cast_to_container : g_object -> g_container = "gcaml_object_cast_to_container"
 external container_cast_to_object : g_container -> g_object = "%identity"
-external container_add_child : g_container -> g_container -> string -> unit = "gcaml_container_append_child"
-external container_remove_child : g_container -> g_container -> unit = "gcaml_container_remove_child"
+external container_add_child : g_container -> g_widget -> unit = "gcaml_container_append_child"
+external container_remove_child : g_container -> g_widget -> unit = "gcaml_container_remove_child"
 
 (* this is like this for a reason. don't call init yourself! *)
 let _ = 

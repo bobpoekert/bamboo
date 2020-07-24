@@ -425,6 +425,17 @@ CAMLprim value gcaml_widget_get_name(value v_widg) {
     CAMLreturn(res);
 }
 
+CAMLprim value gcaml_widget_show(value v_widg) {
+    CAMLparam1(v_widg);
+
+    GtkWidget *widg = (GtkWidget *) unbox_g_object(v_widg);
+
+    gtk_widget_show(widg);
+
+    CAMLreturn(Val_unit);
+
+}
+
 CAMLprim value gcaml_object_cast_to_widget(value v_widg) {
     CAMLparam1(v_widg);
     

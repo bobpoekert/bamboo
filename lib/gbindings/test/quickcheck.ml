@@ -18,7 +18,9 @@ let test_widget_set_name =
         let obj = object_new typ in 
         let widg = object_cast_to_widget obj in 
         widget_set_name widg n;
-        String.equal n (widget_get_name widg) in 
+        let n2 = (widget_get_name widg) in
+        object_unref obj;
+        String.equal n n2 in
     QCheck.Test.make ~count:10000 ~name:"widget_name" string tester
 
 let roundtrip_tests = 
