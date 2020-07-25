@@ -11,6 +11,7 @@
 #include <caml/bigarray.h>
 #include <caml/threads.h>
 #include <caml/version.h>
+#include <caml/callback.h>
 
 #include <string.h>
 #include <stdlib.h>
@@ -18,6 +19,7 @@
 #include <stdarg.h>
 
 #define unbox_g_value(v) ((GValue *) Data_custom_val(v))
+
 
 void gcaml_g_value_release(value object_wrapper) {
     GValue *v = unbox_g_value(object_wrapper);
@@ -41,6 +43,13 @@ value alloc_g_value(GType type) {
     memset(v, 0, sizeof(GValue));
     if (!v) caml_failwith("out of memory?");
     g_value_init(v, type);
+    return res;
+}
+
+value copy_g_value(GValue *v) {
+    value res = alloc_g_value(G_VALUE_TYPE(v));
+    GValue *rv = unbox_g_value(res);
+    g_value_copy(v, rv);
     return res;
 }
 
@@ -479,6 +488,110 @@ CAMLprim value gcaml_init(value v_argc, value v_argv) {
     /* TODO: get rid of this and register the types we use with girepository */
     gtk_test_register_all_types();
 
+
+    CAMLreturn(Val_unit);
+}
+
+/* signals */
+
+typedef struct gcaml_closure_internal {
+    GClosure closure;
+    value caml_callback;
+} gcaml_closure_internal;
+
+typedef gcaml_closure_internal *gcaml_closure;
+
+void gcaml_closure_init(gcaml_closure res, value inp) {
+
+    res->caml_callback = inp;
+    caml_register_global_root(&res->caml_callback);
+
+
+}
+
+void gcaml_closure_destroy(gpointer notify_data, GClosure *closure) {
+
+    gcaml_closure inp = (gcaml_closure) closure;
+    caml_remove_global_root(&(inp->caml_callback));
+
+}
+
+void gcaml_closure_marshaller(
+        GClosure *closure,
+        GValue *return_value,
+        guint n_param_values,
+        const GValue *param_values,
+        gpointer invocation_hint,
+        gpointer marshal_data) {
+
+    CAMLparam0();
+    CAMLlocal1(arg_array);
+    arg_array = caml_alloc(n_param_values * sizeof(value), 0);
+
+    for (size_t i=0; i < n_param_values; i++) {
+        Store_field(arg_array, i, copy_g_value((GValue *) &param_values[i]));
+    }
+
+    value retval = caml_callback(((gcaml_closure) closure)->caml_callback, arg_array);
+    if (retval != Val_unit) {
+        GValue *g_retval = unbox_g_value(retval);
+
+        g_value_copy(g_retval, return_value);
+    }
+
+    CAMLreturn0;
+}
+
+GClosure *gcaml_closure_to_gclosure(value oc) {
+
+    gcaml_closure occ;
+    GClosure *res = g_closure_new_simple(sizeof(gcaml_closure_internal), 0);
+    occ = (gcaml_closure) res;
+    gcaml_closure_init(occ, oc);
+
+    g_closure_add_finalize_notifier(res, 0, gcaml_closure_destroy);
+    g_closure_set_marshal(res, gcaml_closure_marshaller);
+
+    return res;
+}
+
+CAMLprim value gcaml_signal_connect(
+        value v_target,
+        value v_signal_name,
+        value callback,
+        value v_is_after) {
+
+    CAMLparam4(v_target, v_signal_name, callback, v_is_after);
+    CAMLlocal1(res);
+
+    const char *signal_name = String_val(v_signal_name);
+    GObject *target = unbox_g_object(v_target);
+    gboolean after = Bool_val(v_is_after);
+
+    GClosure *closure = gcaml_closure_to_gclosure(callback);
+    
+    gulong connection_id = g_signal_connect_closure(
+            target, signal_name, closure, after);
+
+    if (connection_id == 0) {
+        caml_failwith("Failed to attach signal");
+    }
+
+    res = caml_alloc(sizeof(gulong), 0);
+    *((gulong *) Data_custom_val(res)) = connection_id;
+
+    CAMLreturn(res);
+}
+
+CAMLprim value gcaml_signal_disconnect(
+        value v_target,
+        value v_id) {
+    CAMLparam2(v_target, v_id);
+
+    gulong id = *((gulong *) Data_custom_val(v_id));
+    GObject *target = unbox_g_object(v_target);
+
+    g_signal_handler_disconnect(target, id);
 
     CAMLreturn(Val_unit);
 }

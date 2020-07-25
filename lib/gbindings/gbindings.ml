@@ -5,6 +5,7 @@ type g_object
 type g_widget
 type g_container
 type g_application
+type g_signal_handle
 
 external g_type_name : g_type -> string = "gcaml_type_name"
 external g_type_of_name : string -> g_type = "gcaml_type_of_name"
@@ -83,6 +84,10 @@ external object_cast_to_container : g_object -> g_container = "gcaml_object_cast
 external container_cast_to_object : g_container -> g_object = "%identity"
 external container_add_child : g_container -> g_widget -> unit = "gcaml_container_append_child"
 external container_remove_child : g_container -> g_widget -> unit = "gcaml_container_remove_child"
+
+external signal_connect : g_object -> string -> (g_value array -> g_value) -> bool -> g_signal_handle = "gcaml_signal_connect"
+external signal_connect_void : g_object -> string -> (g_value array -> unit) -> bool -> g_signal_handle = "gcaml_signal_connect"
+external signal_disconnect : g_object -> g_signal_handle -> unit = "gcaml_signal_disconnect"
 
 (* this is like this for a reason. don't call init yourself! *)
 let _ = 
