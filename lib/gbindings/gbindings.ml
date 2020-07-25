@@ -53,8 +53,6 @@ external g_object_of_g_value : g_value -> g_object = "gcaml_g_object_of_g_value"
 external enum_of_g_value : g_value -> int = "gcaml_enum_of_g_value"
 external flags_of_g_value : g_value -> int = "gcaml_flags_of_g_value"
 
-external g_type_of_g_value : g_value -> g_type = "gcaml_g_type_of_g_value"
-
 external object_new : g_type -> g_object = "gcaml_object_new"
 
 let object_new_by_name name = 

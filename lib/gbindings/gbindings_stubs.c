@@ -339,12 +339,6 @@ CAMLprim value gcaml_value_of_pointer(value v_object) {
     CAMLreturn(res);
 }
 
-CAMLprim value gcaml_g_type_of_g_value(value v_val) {
-    CAMLparam1(v_val);
-    GValue *gv = unbox_g_value(v_val);
-    GType type = G_VALUE_TYPE(gv);
-    CAMLreturn(Val_int(type));
-}
 
 CAMLprim value gcaml_object_set_property(value v_obj, value v_name, value v_val) {
     CAMLparam3(v_obj, v_name, v_val);
@@ -525,14 +519,14 @@ void gcaml_closure_marshaller(
         gpointer marshal_data) {
 
     CAMLparam0();
-    CAMLlocal1(arg_array);
+    CAMLlocal2(arg_array, retval);
     arg_array = caml_alloc(n_param_values * sizeof(value), 0);
 
     for (size_t i=0; i < n_param_values; i++) {
         Store_field(arg_array, i, copy_g_value((GValue *) &param_values[i]));
     }
 
-    value retval = caml_callback(((gcaml_closure) closure)->caml_callback, arg_array);
+    retval = caml_callback(((gcaml_closure) closure)->caml_callback, arg_array);
     if (retval != Val_unit) {
         GValue *g_retval = unbox_g_value(retval);
 

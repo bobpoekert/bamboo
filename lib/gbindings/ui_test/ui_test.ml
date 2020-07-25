@@ -39,17 +39,18 @@ let into_grid = into_container grid_type (fun v ->
 
 let into_window = into_container window_type ignore
 
-let () = Lwt_main.run (
+let () = 
+    Printf.printf "start\n";
+    Lwt_main.run (
 
     Lwt_glib.install ();
+    
 
     let label = make_label "blank" in 
-    let ctr = ref 0 in 
-    let button = make_button "+1" (fun _args -> 
+    let button = make_button "+1" (fun args -> 
         let obj = widget_cast_to_object label in 
-        object_set_property obj "label" (g_value_of_string (Printf.sprintf "%d" !ctr));
+        object_set_property obj "label" (g_value_of_string (Printf.sprintf "%d" (Array.length args)));
         widget_show label;
-        incr ctr;
         ()
     ) in 
     let grid = into_grid [label; button] in
