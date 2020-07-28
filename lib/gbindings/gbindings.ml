@@ -76,6 +76,9 @@ let widget_set_name w n =
 
 let widget_get_name w = Scanf.unescaped (inner_widget_get_name w)
 
+(* target, path to css file, priority *)
+external widget_bind_css : g_widget -> string -> int -> unit = "gcaml_widget_bind_css"
+
 external widget_show : g_widget -> unit = "gcaml_widget_show"
 
 external object_cast_to_container : g_object -> g_container = "gcaml_object_cast_to_container"

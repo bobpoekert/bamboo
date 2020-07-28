@@ -1,0 +1,13 @@
+
+compiler pipeline:
+
+source -> tokens -> ast -> noglib ast -> ocaml ast -> [standard ocaml compiler pipeline]
+
+
+source -> tokens : lexer.mll
+
+tokens -> ast : menhir_parser.mly
+
+ast -> noglib ast : gir_transformer.ml
+
+noglib ast -> ocaml ast : ocaml_astgen.ml

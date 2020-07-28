@@ -1,0 +1,13 @@
+(ocamllex (modules lexer))
+(menhir (modules parser))
+
+(library
+  (name libshoots)
+  (libraries
+    nice_parser
+    base
+    gbindings
+    gobject-introspection
+  )
+  (inline_tests)
+)

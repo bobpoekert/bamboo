@@ -589,3 +589,27 @@ CAMLprim value gcaml_signal_disconnect(
 
     CAMLreturn(Val_unit);
 }
+
+/* styles */
+
+CAMLprim value gcaml_widget_bind_css(value v_target, value v_css_path, value v_priority) {
+    CAMLparam3(v_target, v_css_path, v_priority);
+
+    const char *path = String_val(v_css_path);
+    int priority = Int_val(v_priority);
+    GObject *target = unbox_g_object(v_target);
+    GtkWidget *widg = (GtkWidget *) target;
+
+    GtkCssProvider *provider = gtk_css_provider_new();
+   
+    GError *error;
+    gtk_css_provider_load_from_path(provider, path, &error);
+
+    if (error) caml_failwith(error->message);
+
+    GtkStyleContext *sctx = gtk_widget_get_style_context(widg);
+
+    gtk_style_context_add_provider(sctx, provider, priority);
+
+    CAMLreturn(Val_unit);
+}
