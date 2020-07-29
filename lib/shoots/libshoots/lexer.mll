@@ -122,6 +122,7 @@ let floatnumber = pointfloat | exponentfloat
 let imagnumber = (floatnumber | digitpart) ("j" | "J")
 
 rule token = parse
+    | space +                   { token lexbuf }
     (* Line-joining *)
     | '\\' endline              { newline lexbuf; token lexbuf }
     | '\n'                      { newline lexbuf;
@@ -212,7 +213,6 @@ rule token = parse
         { [BYTES (let x = dq_prefix lexbuf in String.concat "" (List.map (String.make 1) x))] }
     | stringprefix? '"' 
         { [STR (let x = dq_prefix lexbuf in String.concat "" (List.map (String.make 1) x))] }
-    | space+                   { [ SPACE ] }
     | eof                       { [EOF] }
     | _ as c                    { illegal c }
     
@@ -366,7 +366,6 @@ and long_dq_prefix = parse
         | ARROW -> "ARROW "
         
         | FALSE -> "FALSE "
-        | NONE -> "NONE "
         | TRUE -> "TRUE "
         | AND -> "AND "
         | AS -> "AS "

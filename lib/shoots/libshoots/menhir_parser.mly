@@ -39,7 +39,7 @@ SOFTWARE.*
 %token <string> BYTES
 
 %token INDENT DEDENT NEWLINE
-%token EOF SPACE
+%token EOF
 
 (* Operators *)
 %token ADD SUB MUL POW DIV TDIV MOD
@@ -62,7 +62,7 @@ SOFTWARE.*
 %token FALSE TRUE AND AS ASSERT BREAK
 %token CONTINUE DEF ELIF ELSE
 %token FOR FROM IF IMPORT REQUIRE IN
-%token IS NOT OR NONE
+%token IS NOT OR
 
 (* Entrypoint *)
 %start file_input
@@ -276,9 +276,17 @@ compound_stmt:
     | widget        { $1 }
 ;
 
+widget_spec:
+    | name                  { [Widget_name $1] }
+    | DOT name widget_spec  { (Widget_cls $2) :: $3 }
+    | SHARP name widget_spec { (Widget_id $2) :: $3 }
+;
+
 widget:
-    | PERCENT name LPAR arglist RPAR COLON suite { Widget ($2, fst $4, snd $4, Some $7) }
-    | PERCENT name LPAR arglist RPAR { Widget ($2, fst $4, snd $4, None) }
+    | PERCENT widget_spec LPAR RPAR COLON suite { Widget($2, [], [], Some $6) }
+    | PERCENT widget_spec LPAR RPAR { Widget($2, [], [], None) }
+    | PERCENT widget_spec LPAR arglist RPAR COLON suite { Widget ($2, fst $4, snd $4, Some $7) }
+    | PERCENT widget_spec LPAR arglist RPAR { Widget ($2, fst $4, snd $4, None) }
     ;
 
 if_stmt:

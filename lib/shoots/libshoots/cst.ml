@@ -32,14 +32,13 @@ and modl =
     | Expression of expr (* body *)
     (* Only useful in Jython's typesystem *)
     | Suite of stmt list (* body *)
-
 and stmt =
     | FunctionDef of identifier (* name *)
             * arguments (* args *)
             * stmt list (* body *)
             * expr list (* decorator list *)
             * expr option (* returns *)
-    | Widget of (identifier * expr list * keyword list * stmt list option)
+    | Widget of (widget_spec list * expr list * keyword list * stmt list option)
     | For of expr (* target *)
             * expr (* iter *)
             * stmt list (* body *)
@@ -116,6 +115,11 @@ and expr =
     | Tuple of expr list (* elts *)
             * expr_context (* ctx *)
     | Null (* should raise an error if accessed *)
+
+and widget_spec = 
+    | Widget_name of identifier
+    | Widget_id of identifier
+    | Widget_cls of identifier
 
 and expr_context = 
     | Load 
