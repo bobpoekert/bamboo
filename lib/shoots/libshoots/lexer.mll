@@ -26,7 +26,7 @@ SOFTWARE.*
 
 {
 
-    open Parser
+    open Menhir_parser
 
     exception LexError of string
 
@@ -38,7 +38,6 @@ SOFTWARE.*
 
     let keywords = [
         "false", FALSE;
-        "null", NONE;
         "true", TRUE;
         "and", AND;
         "mod", MOD;
@@ -81,7 +80,6 @@ SOFTWARE.*
 
 let space = ' ' | '\t' 
 let endline = '\n' | '\r' | "\r\n"
-let comment = "#" [^ '\n' '\r']*
 
 (* Identifiers *)
 
@@ -124,17 +122,8 @@ let floatnumber = pointfloat | exponentfloat
 let imagnumber = (floatnumber | digitpart) ("j" | "J")
 
 rule token = parse
-    | (space | comment)+        { token lexbuf }
     (* Line-joining *)
     | '\\' endline              { newline lexbuf; token lexbuf }
-    | ';' (space | comment)* '\n' { newline lexbuf;
-                                    let n = indentation lexbuf in
-                                    match !stack with
-                                        | m :: _ when m < n ->
-                                            stack := n :: !stack;
-                                            [SEMICOLEND;  INDENT]
-                                        | _ -> SEMICOLEND  :: unindent n
-                                }
     | '\n'                      { newline lexbuf;
                                     let n = indentation lexbuf in
                                     if !open_pars > 0 then token lexbuf else
@@ -223,12 +212,11 @@ rule token = parse
         { [BYTES (let x = dq_prefix lexbuf in String.concat "" (List.map (String.make 1) x))] }
     | stringprefix? '"' 
         { [STR (let x = dq_prefix lexbuf in String.concat "" (List.map (String.make 1) x))] }
+    | space+                   { [ SPACE ] }
     | eof                       { [EOF] }
     | _ as c                    { illegal c }
     
 and indentation = parse
-    | (space | comment)* '\n'
-        { newline lexbuf; indentation lexbuf }
     | space* as s   { String.length s }
 
 and unesc_dq_prefix = parse

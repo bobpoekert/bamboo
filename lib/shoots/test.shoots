@@ -1,0 +1,16 @@
+require "gtk-3.0"
+
+def tweet(tweeter, content):
+  %GtkBox.tweet():
+    %GtkBox.tweeter():
+      %GtkBox.screenname():
+  %GtkLabel(label = tweeter.display_name)
+  %GtkLabel(label = tweeter.name)
+  %GtkImage.av(src = tweeter.av_url)
+    %GtkLabel(label = content)
+
+def itmeline(tweets):
+  %GtkList#tweets
+    for tweet in tweets:
+      tweet(tweet.tweeter, tweet.content)
+

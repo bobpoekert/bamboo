@@ -39,7 +39,7 @@ SOFTWARE.*
 %token <string> BYTES
 
 %token INDENT DEDENT NEWLINE
-%token EOF
+%token EOF SPACE
 
 (* Operators *)
 %token ADD SUB MUL POW DIV TDIV MOD
@@ -59,10 +59,10 @@ SOFTWARE.*
 
 (* List of tokens for keywords *)
 
-%token FALSE NONE TRUE AND AS ASSERT BREAK
+%token FALSE TRUE AND AS ASSERT BREAK
 %token CONTINUE DEF ELIF ELSE
 %token FOR FROM IF IMPORT REQUIRE IN
-%token IS NOT OR
+%token IS NOT OR NONE
 
 (* Entrypoint *)
 %start file_input
@@ -210,7 +210,7 @@ import_stmt:
 
 import_name:
     | IMPORT dotted_as_names  { Import $2 }
-    | REQUIRE dotted_as_names { Require $2 }
+    | REQUIRE strings { Require $2 }
 ;
 
 import_from:
@@ -455,7 +455,6 @@ atom:
     | strings           { Str $1 }
     | bytes             { Bytes $1 }
     | DOT DOT DOT       { Ellipsis }
-    | NONE              { NameConstant SNone }
     | TRUE              { NameConstant True }
     | FALSE             { NameConstant False }
 ;     

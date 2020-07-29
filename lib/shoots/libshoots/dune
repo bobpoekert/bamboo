@@ -1,5 +1,5 @@
 (ocamllex (modules lexer))
-(menhir (modules parser))
+(menhir (modules menhir_parser))
 
 (library
   (name libshoots)
