@@ -6,8 +6,6 @@
   (libraries
     nice_parser
     base
-    gbindings
-    gobject-introspection
   )
   (inline_tests)
 )

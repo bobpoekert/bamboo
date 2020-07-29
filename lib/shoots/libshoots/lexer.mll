@@ -61,7 +61,7 @@ SOFTWARE.*
 
     let id_or_kwd s = try List.assoc s keywords with _ -> IDENT s
 
-    let newline lexbuf =
+    let newline (lexbuf:Lexing.lexbuf) =
         let pos = lexbuf.lex_curr_p in
         lexbuf.lex_curr_p <- {
             pos with pos_lnum = pos.pos_lnum + 1;
@@ -260,7 +260,7 @@ and unesc_sq_prefix = parse
     | _ as c        { (c) :: (unesc_sq_prefix lexbuf) }    
 
 and sq_prefix = parse
-    | eof           { failwtih "unterminated string" } 
+    | eof           { failwith "unterminated string" } 
     | "\\\n"        { newline lexbuf; sq_prefix lexbuf }
     | "\'"          { [] }
     | "\\\\"        {  '\\' :: (sq_prefix lexbuf) }
@@ -377,20 +377,6 @@ and long_dq_prefix = parse
         | EQ -> "EQ "
         | ARROW -> "ARROW "
         
-        | ADDEQ -> "ADDEQ "
-        | SUBEQ -> "SUBEQ "
-        | MULEQ -> "MULEQ "
-        | DIVEQ -> "DIVEQ "
-        | TDIVEQ -> "TDIVEQ "
-        | MODEQ -> "MODEQ "
-        | ATEQ -> "ATEQ "
-        | BITANDEQ -> "BITANDEQ "
-        | BITOREQ -> "BITOREQ "
-        | BITXOREQ -> "BITXOREQ "
-        | RSHIFTEQ -> "RSHIFTEQ "
-        | LSHIFTEQ  -> "LSHIFTEQ "
-        | POWEQ -> "POWEQ "
-
         | FALSE -> "FALSE "
         | NONE -> "NONE "
         | TRUE -> "TRUE "
@@ -406,10 +392,17 @@ and long_dq_prefix = parse
         | IMPORT -> "IMPORT "
         | IN -> "IN "
         | IS -> "IS "
-        | NONLOCAL -> "NONLOCAL "
         | NOT -> "NOT "
         | OR -> "OR "
-        | WHILE -> "WHILE "
+
+        | WITH -> "WITH "
+        | SINGLEQ -> "SINGLEQ "
+        | SHARP -> "SHARP "
+        | REQUIRE -> "REQUIRE "
+        | PERCENT -> "PERCENT "
+        | DOLLAR -> "DOLLAR "
+        | CONTINUE -> "CONTINUE "
+        | BREAK -> "BREAK "
 
       let next_token =
         let tokens = Queue.create () in

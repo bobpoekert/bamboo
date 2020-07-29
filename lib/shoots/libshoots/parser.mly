@@ -27,28 +27,8 @@ SOFTWARE.*
 
  
 %{
-    open Format
     open Cst
 
-    let breakClassdef = function
-        | ClassDef (name, bases, keywords, body, decs) -> name, bases, keywords, body, decs
-        | _ -> assert false
-
-    let breakFunctiondef = function
-        | FunctionDef (name, args, body, decs, ret) -> name, args, body, decs, ret
-        | _ -> assert false
-
-    let breakAsyncFundef = function
-        | AsyncFunctionDef (name, args, body, decs, ret) -> name, args, body, decs, ret
-        | _ -> assert false
-
-    let breakFor = function
-        | For (t, it, b, e) -> t, it, b, e
-        | _ -> assert false
-
-    let breakWith = function
-        | With (it, b) -> it, b
-        | _ -> assert false
 %}
 
 %token <string> IDENT
@@ -63,9 +43,9 @@ SOFTWARE.*
 
 (* Operators *)
 %token ADD SUB MUL POW DIV TDIV MOD
-%token AT PERCENT
+%token AT PERCENT SHARP DOLLAR
 %token LSHIFT RSHIFT BITAND BITOR BITXOR BITNOT
-%token LT GT LE GE EQUAL NEQ
+%token LT GT LE GE EQUAL SINGLEQ NEQ
 %token WITH
 
 %token SEMICOLEND (* ; at the end of a line *)
@@ -80,8 +60,8 @@ SOFTWARE.*
 (* List of tokens for keywords *)
 
 %token FALSE NONE TRUE AND AS ASSERT BREAK
-%token CONTINUE DEF DEL ELIF ELSE
-%token FOR FROM IF IMPORT IN
+%token CONTINUE DEF ELIF ELSE
+%token FOR FROM IF IMPORT REQUIRE IN
 %token IS NOT OR
 
 (* Entrypoint *)
@@ -172,54 +152,6 @@ tfpkwargs:
     POW tfpdef { $2 }
 ;
 
-(* varargs is similar to typedargslist, without the possible annotations *)
-varargslist:
-   | { [], None, [], [], None, [] }
-   | vfpdef { [$1], None, [], [], None, [Null] }
-   | vfpdef EQ test { [$1], None, [], [], None, [$3] }
-   | vfpdef COMMA varargslist {
-       match $3 with (a, va, kwon, kwdef, kwa, def) ->
-       ($1 :: a, va, kwon, kwdef, kwa, Null :: def)
-       }   
-   | vfpdef EQ test COMMA varargslist {
-       match $5 with (a, va, kwon, kwdef, kwa, def) ->
-       ($1 :: a, va, kwon, kwdef, kwa, $3 :: def)
-    }
-   | vfpvarargs { match $1 with (va, kwon, kwdef, kwa) ->
-        ( [], va, kwon, kwdef, kwa, [] ) }
-   | POW vfpdef     { ([], (None : arg option), [], [], Some $2, []) }
-;
-
-vfpdef:
-    | name { ($1, (None : expr option)) }
-;
-
-vfpvarargs:
-    | MUL vfpdef vfpkwonly_args { 
-        match $3 with (kwonly, kwdef, kwargs) ->
-        (Some $2, kwonly, kwdef, kwargs) }
-    | MUL COMMA vfpdef vfpkwonly_args {
-            match $4 with (kwonly, kwdef, kwarg) ->
-            (None, $3 :: kwonly, Null :: kwdef, kwarg)
-        }
-;        
-
-vfpkwonly_args:
-    | COMMA vfpdef vfpkwonly_args { match $3 with
-            ( kwonly, kwdef, kwarg) ->
-            ($2 :: kwonly, Null :: kwdef, kwarg)
-        }
-    | COMMA vfpdef EQ test vfpkwonly_args {
-        match $5 with (kwonly, kwdef, kwarg) ->
-            ($2 :: kwonly, $4 :: kwdef, kwarg)
-        }
-    | COMMA vfpkwargs { ([], [], Some $2) }
-    | { ([], [], None) }
-;
-
-vfpkwargs:
-    POW vfpdef COMMA? { $2 }
-;
 
 stmt:
     | simple_stmt { $1 : stmt list } 
@@ -240,24 +172,8 @@ small_stmt:
 
 expr_stmt:
     | testlist_star_expr    { Expr $1 }
-    | testlist_star_expr annassign { AnnAssign ($1, fst $2, snd $2) }
-    | testlist_star_expr augassign testlist    { AugAssign ($1, $2, $3) }
-    | testlist_star_expr EQ expr_stmt_rh_lst { Assign ($1:: (fst $3), snd $3) }
 ;
 
-expr_stmt_rh_lst:
-    | expr_stmt_rh { [], $1 }
-    | expr_stmt_rh EQ expr_stmt_rh_lst { $1 :: (fst $3), snd $3 }
-;
-
-expr_stmt_rh:
-    | testlist_star_expr { $1 }
-;    
-
-annassign:
-    | COLON test    { $2, None }
-    | COLON test EQ test { $2, Some $4 }
-;
 
 test_starexpr:
     | test      { $1 }
@@ -272,16 +188,10 @@ testlist_star_expr:
 ;
 
 
-del_stmt:
-    DEL exprlist    { Delete $2 }
-;
 
 flow_stmt:
     | break_stmt    { $1 }
     | continue_stmt { $1 }
-    | return_stmt   { $1 }
-    | raise_stmt    { $1 }
-    | yield_stmt    { Expr $1 }
 ;
 
 break_stmt:
@@ -367,8 +277,8 @@ compound_stmt:
 ;
 
 widget:
-    | PERCENT LPAR arglist RPAR COLON suite { Widget ($3, Some $6) }
-    | PERCENT LPAR arglist RPAR { Widget ($3, None) }
+    | PERCENT name LPAR arglist RPAR COLON suite { Widget ($2, fst $4, snd $4, Some $7) }
+    | PERCENT name LPAR arglist RPAR { Widget ($2, fst $4, snd $4, None) }
     ;
 
 if_stmt:
@@ -407,12 +317,10 @@ suite:
 test:
     | or_test                       { $1 }         
     | or_test IF or_test ELSE test  { IfExp($3, $1, $5) }
-    | lambdef                     { $1 }
 ;
 
 test_nocond:
     | or_test           { $1 }
-    | lambdef_nocond    { $1 }    
 ;    
 
 or_test:
@@ -488,6 +396,7 @@ arith_expr:
     | term                         { $1 }
     | arith_expr ADD term          { BinOp($1, Add, $3) }    
     | arith_expr SUB term          { BinOp($1, Sub, $3) }    
+    | arith_expr DOLLAR term          { BinOp($1, StringFmt, $3) }    
 ;
 
 term:
@@ -501,7 +410,6 @@ term_op:
     | DIV   { Div }
     | MOD   { Mod }
     | TDIV  { FloorDiv }
-    | DOLLAR { StringFormat }
 ;    
 
 factor:
@@ -657,9 +565,6 @@ comp_for1:
     | FOR exprlist IN or_test list(comp_if) { match $2 with
         | [s] -> (s, $4, $5, false)
         | l -> (Tuple(l, Store), $4, $5, false) }
-    | ASYNC FOR exprlist IN or_test list(comp_if) { match $3 with  
-        | [s] -> (s, $5, $6, true)
-        | l -> (Tuple(l, Store), $5, $6, true) }
 ;          
 
 comp_if:

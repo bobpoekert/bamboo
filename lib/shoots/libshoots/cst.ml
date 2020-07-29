@@ -39,6 +39,7 @@ and stmt =
             * stmt list (* body *)
             * expr list (* decorator list *)
             * expr option (* returns *)
+    | Widget of (identifier * expr list * keyword list * stmt list option)
     | For of expr (* target *)
             * expr (* iter *)
             * stmt list (* body *)
@@ -141,6 +142,7 @@ and boolop =
 and operator =
     | Add
     | Sub
+    | StringFmt
     | Mult
     | MatMult
     | Div
@@ -158,6 +160,7 @@ and unaryop =
     | Not
     | UAdd
     | USub
+    | WidgetId
 
 and cmpop = 
     | Eq
