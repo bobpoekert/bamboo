@@ -80,6 +80,7 @@ SOFTWARE.*
 
 let space = ' ' | '\t' 
 let endline = '\n' | '\r' | "\r\n"
+let whitespace = space | endline
 
 (* Identifiers *)
 
@@ -168,7 +169,7 @@ rule token = parse
     | "]"                       { [RSQ] }
     | "{"                       { [LBRACE] }
     | "}"                       { [RBRACE] }
-    | ","                       { [COMMA] }
+    | "," whitespace*           { [COMMA] }
     | ":"                       { [COLON] }
     | "."                       { [DOT] }
     | ";"                       { [SEMICOL] }
