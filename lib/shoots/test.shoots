@@ -1,9 +1,12 @@
 require 'gtk-3.0'
 
+// this is a comment
+
 def tweet(tweeter:map, content:int):
   %GtkBox():
     %GtkBox.tweeter():
-      let x, z = [5, 6],
+      //this is a comment too
+      let x, z = [5, 6], // so is this
           y = 2:
         %GtkLabel(label = tweeter.display_name)
         %GtkLabel(label = tweeter.name)

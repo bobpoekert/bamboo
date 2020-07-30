@@ -124,6 +124,7 @@ let imagnumber = (floatnumber | digitpart) ("j" | "J")
 
 rule token = parse
     | space +                   { token lexbuf }
+    | space* "//" [^ '\n']* endline    { token lexbuf }
     (* Line-joining *)
     | '\\' endline              { newline lexbuf; token lexbuf }
     | '\n'                      { newline lexbuf;
@@ -142,7 +143,6 @@ rule token = parse
     | '*'                       { [MUL] }
     | "**"                      { [POW] }
     | '/'                       { [DIV] }
-    | "//"                      { [TDIV] }
     | '%'                       { [MOD] }
     | '#'                       { [SHARP] } (* for widget id *)
     | '@'                       { [AT] }
@@ -311,6 +311,7 @@ and long_dq_prefix = parse
  {
     (* Useful for debug *)
     let print_token = function
+
 
         | IDENT s -> "IDENT " ^ s ^" "
         | INT i -> "INT " ^ (string_of_int i) ^ " "
