@@ -142,9 +142,8 @@ rule token = parse
     | "**"                      { [POW] }
     | '/'                       { [DIV] }
     | "//"                      { [TDIV] }
-    | '%'                       { [PERCENT] }
+    | '%'                       { [MOD] }
     | '#'                       { [SHARP] } (* for widget id *)
-    | '$'                       { [DOLLAR] } (* for string format *)
     | '@'                       { [AT] }
     | "<<"                      { [LSHIFT] }
     | ">>"                      { [RSHIFT] }
@@ -157,7 +156,6 @@ rule token = parse
     | "<="                      { [LE] }
     | ">="                      { [GE] }
     | "=="                      { [EQUAL] }
-    | '='                       { [SINGLEQ] }
     | "<>"                      { [NEQ] }
     | "!="                      { [NEQ] }
     (* Delimiters *)
@@ -174,6 +172,7 @@ rule token = parse
     | ":"                       { [COLON] }
     | "."                       { [DOT] }
     | ";"                       { [SEMICOL] }
+    | "="                       { [EQ] }
     | "->"                      { [ARROW] }
     (* Numbers *)
     | integer as i              { [INT (int_of_string i)] }
@@ -383,11 +382,8 @@ and long_dq_prefix = parse
         | OR -> "OR "
 
         | WITH -> "WITH "
-        | SINGLEQ -> "SINGLEQ "
         | SHARP -> "SHARP "
         | REQUIRE -> "REQUIRE "
-        | PERCENT -> "PERCENT "
-        | DOLLAR -> "DOLLAR "
         | CONTINUE -> "CONTINUE "
         | BREAK -> "BREAK "
 

@@ -43,9 +43,9 @@ SOFTWARE.*
 
 (* Operators *)
 %token ADD SUB MUL POW DIV TDIV MOD
-%token AT PERCENT SHARP DOLLAR
+%token AT SHARP
 %token LSHIFT RSHIFT BITAND BITOR BITXOR BITNOT
-%token LT GT LE GE EQUAL SINGLEQ NEQ
+%token LT GT LE GE EQUAL NEQ
 %token WITH
 
 %token SEMICOLEND (* ; at the end of a line *)
@@ -168,6 +168,7 @@ small_stmt:
     | flow_stmt    { $1 }
     | import_stmt  { $1 }
     | assert_stmt  { $1 }
+    | widget_small { $1 }
 ;    
 
 expr_stmt:
@@ -273,21 +274,26 @@ compound_stmt:
     | for_stmt      { $1 }
     | with_stmt     { $1 }
     | funcdef       { $1 }
-    | widget        { $1 }
+    | widget_block  { $1 }
 ;
 
-widget_spec:
-    | name                  { [Widget_name $1] }
-    | DOT name widget_spec  { (Widget_cls $2) :: $3 }
+widget_spec: 
+    | { [] }
+    | name widget_spec       { (Widget_name $1) :: $2 }
+    | DOT name widget_spec   { (Widget_cls $2) :: $3 }
     | SHARP name widget_spec { (Widget_id $2) :: $3 }
 ;
 
-widget:
-    | PERCENT widget_spec LPAR RPAR COLON suite { Widget($2, [], [], Some $6) }
-    | PERCENT widget_spec LPAR RPAR { Widget($2, [], [], None) }
-    | PERCENT widget_spec LPAR arglist RPAR COLON suite { Widget ($2, fst $4, snd $4, Some $7) }
-    | PERCENT widget_spec LPAR arglist RPAR { Widget ($2, fst $4, snd $4, None) }
-    ;
+widget_block:
+    | MOD widget_spec LPAR RPAR COLON suite { Widget($2, [], [], Some $6) }
+    | MOD widget_spec LPAR arglist RPAR COLON suite { Widget ($2, fst $4, snd $4, Some $7) }
+;
+
+widget_small:
+    | MOD widget_spec LPAR RPAR { Widget($2, [], [], None) }
+    | MOD widget_spec LPAR arglist RPAR { Widget ($2, fst $4, snd $4, None) }
+;
+
 
 if_stmt:
     | IF test COLON suite elif_else { If ($2, $4, $5) }
@@ -314,7 +320,7 @@ with_stmt:
 
 with_item:
     | test          { ( $1, (None : expr option) ) }
-    | test SINGLEQ expr  { ( $1, Some $3) }
+    | test EQ expr  { ( $1, Some $3) }
 ;
 
 suite:
@@ -404,7 +410,6 @@ arith_expr:
     | term                         { $1 }
     | arith_expr ADD term          { BinOp($1, Add, $3) }    
     | arith_expr SUB term          { BinOp($1, Sub, $3) }    
-    | arith_expr DOLLAR term          { BinOp($1, StringFmt, $3) }    
 ;
 
 term:
