@@ -46,7 +46,7 @@ SOFTWARE.*
 %token AT SHARP
 %token LSHIFT RSHIFT BITAND BITOR BITXOR BITNOT
 %token LT GT LE GE EQUAL NEQ
-%token WITH
+%token LET
 
 %token SEMICOLEND (* ; at the end of a line *)
 %token COMMARSQ   (* , ] *)
@@ -272,7 +272,7 @@ assert_stmt:
 compound_stmt:
     | if_stmt       { $1 }
     | for_stmt      { $1 }
-    | with_stmt     { $1 }
+    | let_stmt     { $1 }
     | funcdef       { $1 }
     | widget_block  { $1 }
 ;
@@ -314,11 +314,16 @@ for_stmt:
         | l -> For (Tuple(l, Store), $4, $6, $9) }
 ;
 
-with_stmt:
-    WITH separated_nonempty_list(COMMA, with_item) COLON suite    { With ( $2, $4) }
+
+let_stmt:
+    LET let_items COLON suite    { Let ( $2, $4) }
 ;
 
-with_item:
+let_items:
+    separated_nonempty_list(COMMA, let_item) { $1 }
+;
+
+let_item:
     | test          { ( $1, (None : expr option) ) }
     | test EQ expr  { ( $1, Some $3) }
 ;

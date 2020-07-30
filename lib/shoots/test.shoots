@@ -1,11 +1,12 @@
 require 'gtk-3.0'
 
-def tweet(tweeter, content):
+def tweet(tweeter:map, content:int):
   %GtkBox():
     %GtkBox.tweeter():
-      %GtkLabel(label = tweeter.display_name)
-      %GtkLabel(label = tweeter.name)
-      %GtkImage(src = tweeter.av_url)
+      let x, z = [5, 6], y = 2:
+        %GtkLabel(label = tweeter.display_name)
+        %GtkLabel(label = tweeter.name)
+        %GtkImage(src = tweeter.av_url)
 
 def feed(tweets):
   %GtkList#tweets():

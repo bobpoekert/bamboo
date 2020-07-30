@@ -55,7 +55,7 @@ SOFTWARE.*
         "is", IS;
         "not", NOT;
         "or", OR;
-        "let", WITH; (* TODO: replace name WITH with LET *)
+        "let", LET; 
     ]
 
     let id_or_kwd s = try List.assoc s keywords with _ -> IDENT s
@@ -381,7 +381,7 @@ and long_dq_prefix = parse
         | NOT -> "NOT "
         | OR -> "OR "
 
-        | WITH -> "WITH "
+        | LET -> "LET "
         | SHARP -> "SHARP "
         | REQUIRE -> "REQUIRE "
         | CONTINUE -> "CONTINUE "

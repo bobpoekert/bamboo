@@ -46,7 +46,7 @@ and stmt =
     | If of expr (* test *)
             * stmt list (* body *)
             * stmt list (* else *)
-    | With of withitem list (* items *)
+    | Let of letitem list (* items *)
             * stmt list (* body *)
     | Assert of expr (* test *)
             * expr option (* msg *)
@@ -197,7 +197,7 @@ and keyword = identifier option (* arg *)
 (* import name with optional 'as' alias *)
 and alias = identifier (* name *) * identifier option (* asname *)
 
-and withitem = expr (* context_expr *) * expr option (* optional_vars *)
+and letitem = expr (* assign target *) * expr option (* assign source *)
 
 and number = 
     | Int of int
