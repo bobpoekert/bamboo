@@ -29,14 +29,12 @@ SOFTWARE.*
 %{
     open Cst
 
-    (* 
     let with_pos left right thing = 
         ({
             Ppxlib.Location.loc_start = left;
             Ppxlib.Location.loc_end = right;
             loc_ghost = false;
         }, thing)
-        *)
 
 %}
 
@@ -173,6 +171,10 @@ simple_stmt:
 ;
 
 small_stmt:
+    inner_small_stmt { with_pos $symbolstartpos $endpos $1 }
+;
+
+inner_small_stmt:
     | expr_stmt    { $1 }
     | flow_stmt    { $1 }
     | import_stmt  { $1 }
@@ -279,6 +281,10 @@ assert_stmt:
 ;    
 
 compound_stmt:
+    inner_compound_stmt {  with_pos $symbolstartpos $endpos $1 }
+;
+
+inner_compound_stmt:
     | if_stmt       { $1 }
     | for_stmt      { $1 }
     | let_stmt     { $1 }
@@ -310,7 +316,7 @@ if_stmt:
 
 elif_else:
     | { [] }
-    | ELIF test COLON suite elif_else { [ If ($2, $4, $5) ] }
+    | ELIF test COLON suite elif_else { [  with_pos $symbolstartpos $endpos (If ($2, $4, $5) )] }
     | ELSE COLON suite      { $3 }
 ;        
     

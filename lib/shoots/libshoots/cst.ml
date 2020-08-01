@@ -24,11 +24,12 @@ SOFTWARE.*
 
 *)
 
+
 type identifier = string
 
 and widget = (widget_spec list * expr list * keyword list * stmt list option)
 
-and stmt =
+and inner_stmt =
     | FunctionDef of identifier (* name *)
             * arguments (* args *)
             * stmt list (* body *)
@@ -55,7 +56,7 @@ and stmt =
     | Break
     | Continue
 
-(* and stmt = (Location.t * stmt_val) *)
+and stmt = (Ppxlib.Location.t * inner_stmt)
 
 and expr = 
     | BoolOp of boolop (* operator *)
