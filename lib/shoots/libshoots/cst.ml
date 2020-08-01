@@ -26,19 +26,15 @@ SOFTWARE.*
 
 type identifier = string
 
-and modl = 
-    | Module of stmt list (* body *)
-    | Interactive of stmt list (* body *)
-    | Expression of expr (* body *)
-    (* Only useful in Jython's typesystem *)
-    | Suite of stmt list (* body *)
+and widget = (widget_spec list * expr list * keyword list * stmt list option)
+
 and stmt =
     | FunctionDef of identifier (* name *)
             * arguments (* args *)
             * stmt list (* body *)
             * expr list (* decorator list *)
             * expr option (* returns *)
-    | Widget of (widget_spec list * expr list * keyword list * stmt list option)
+    | Widget of widget
     | For of expr (* target *)
             * expr (* iter *)
             * stmt list (* body *)
@@ -58,6 +54,8 @@ and stmt =
     | Expr of expr (* value *)
     | Break
     | Continue
+
+(* and stmt = (Location.t * stmt_val) *)
 
 and expr = 
     | BoolOp of boolop (* operator *)
@@ -115,6 +113,7 @@ and expr =
     | Tuple of expr list (* elts *)
             * expr_context (* ctx *)
     | Null (* should raise an error if accessed *)
+
 
 and widget_spec = 
     | Widget_name of identifier
@@ -178,7 +177,6 @@ and cmpop =
 and comprehension = expr (* target *) 
         * expr (* iter *)
         * expr list (* ifs *)
-        * bool (* is_async *)
 
 and arguments = arg list (* args *)
         * arg option (* vararg *)
@@ -208,3 +206,5 @@ and singleton =
     | True
     | False
     | SNone
+
+

@@ -29,6 +29,15 @@ SOFTWARE.*
 %{
     open Cst
 
+    (* 
+    let with_pos left right thing = 
+        ({
+            Ppxlib.Location.loc_start = left;
+            Ppxlib.Location.loc_end = right;
+            loc_ghost = false;
+        }, thing)
+        *)
+
 %}
 
 %token <string> IDENT
@@ -68,7 +77,7 @@ SOFTWARE.*
 %start file_input
 
 (* Type returned *)
-%type <Cst.modl> file_input
+%type <Cst.stmt list> file_input
 
 %type <Cst.stmt list> stmt
 %type <string> dotted_name
@@ -78,7 +87,7 @@ SOFTWARE.*
 (* We omit single_input and eval_input *)
 
 file_input:
-    nl_stmt_list EOF { Module ($1) }
+    nl_stmt_list EOF { $1 }
 ;
 
 nl_stmt_list:
@@ -580,8 +589,8 @@ comp_for:
 
 comp_for1:
     | FOR exprlist IN or_test list(comp_if) { match $2 with
-        | [s] -> (s, $4, $5, false)
-        | l -> (Tuple(l, Store), $4, $5, false) }
+        | [s] -> (s, $4, $5)
+        | l -> (Tuple(l, Store), $4, $5) }
 ;          
 
 comp_if:

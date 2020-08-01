@@ -3,9 +3,5 @@
 
 (library
   (name libshoots)
-  (libraries
-    nice_parser
-    base
-  )
-  (inline_tests)
-)
+  (libraries nice_parser base ppxlib ocaml-migrate-parsetree)
+  (preprocess (pps ppxlib.metaquot)))
