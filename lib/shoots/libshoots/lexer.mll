@@ -119,8 +119,6 @@ let pointfloat = digitpart* fraction | digitpart "."
 let exponentfloat = (digitpart | pointfloat) exponent
 let floatnumber = pointfloat | exponentfloat
 
-(* Imaginary literals *)
-let imagnumber = (floatnumber | digitpart) ("j" | "J")
 
 rule token = parse
     | space +                   { token lexbuf }
@@ -178,7 +176,6 @@ rule token = parse
     (* Numbers *)
     | integer as i              { [INT (int_of_string i)] }
     | floatnumber as f          { [FLOAT (float_of_string f)] }
-    | imagnumber  as i          { [IMAG i] }
     (* Long string literals *)
     | rawbyteprefix "\"\"\"" 
         { [BYTES (let x = unesc_long_dq_prefix lexbuf in String.concat "" (List.map (String.make 1) x))] }

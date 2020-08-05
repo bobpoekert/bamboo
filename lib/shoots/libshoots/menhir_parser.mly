@@ -41,7 +41,6 @@ SOFTWARE.*
 %token <string> IDENT
 %token <int> INT
 %token <float> FLOAT
-%token <string> IMAG
 %token <string> STR
 %token <string> BYTES
 
@@ -322,11 +321,8 @@ elif_else:
     
 for_stmt:
     | FOR exprlist IN testlist COLON suite  { match $2 with
-        | [e]  -> For (e, $4, $6, [])
-        | l -> For (Tuple(l, Store), $4, $6, []) }
-    | FOR exprlist IN testlist COLON suite ELSE COLON suite    { match $2 with
-        | [e] -> For (e, $4, $6, $9)
-        | l -> For (Tuple(l, Store), $4, $6, $9) }
+        | [e]  -> For (e, $4, $6)
+        | l -> For (Tuple(l, Store), $4, $6) }
 ;
 
 
@@ -401,9 +397,6 @@ comp_op:
    | IS NOT         { IsNot }
 ;
 
-star_expr:
-    MUL expr       { Starred ($2, Load) }
-;     
 
 expr:
     | xor_expr      { $1 }
@@ -487,7 +480,6 @@ atom:
     | number            { Num $1 }
     | strings           { Str $1 }
     | bytes             { Bytes $1 }
-    | DOT DOT DOT       { Ellipsis }
     | TRUE              { NameConstant True }
     | FALSE             { NameConstant False }
 ;     
@@ -524,7 +516,6 @@ atom_dict:
 number:
     | INT   { Int $1 }
     | FLOAT { Float $1 }
-    | IMAG  { Imag $1 }
 ;
 
 strings:
@@ -547,14 +538,10 @@ subscript:
     | test? COLON test? COLON test?     { Slice ($1,$3, $5) }
 ;
 
-expr_star:
-    | expr          { $1 }
-    | star_expr     { $1 }
-;
 
 exprlist:
-   | nonempty_list(terminated(expr_star, COMMA))  { $1 }
-   | separated_nonempty_list(COMMA, expr_star)    { $1 }
+   | nonempty_list(terminated(expr, COMMA))  { $1 }
+   | separated_nonempty_list(COMMA, expr)    { $1 }
 ;
     
 testlist:

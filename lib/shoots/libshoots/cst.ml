@@ -34,12 +34,11 @@ and inner_stmt =
             * arguments (* args *)
             * stmt list (* body *)
             * expr list (* decorator list *)
-            * expr option (* returns *)
+            * expr option (* return type *)
     | Widget of widget
     | For of expr (* target *)
             * expr (* iter *)
             * stmt list (* body *)
-            * stmt list (* else *)
     | If of expr (* test *)
             * stmt list (* body *)
             * stmt list (* else *)
@@ -72,15 +71,6 @@ and expr =
     | Dict of expr list (* keys *)
             * expr list (* values *)
     | Set of expr list (* elts *)
-    | ListComp of expr (* elt *)
-            * comprehension list (* generators *)
-    | SetComp of expr (* elt *)
-            * comprehension list (* generators *)
-    | DictComp of expr (* key *)
-            * expr (* value *)
-            * comprehension list (* generators *)
-    | GeneratorExp of expr (* elt *)
-            * comprehension list (* generators *)
     (* The grammar constraints where yield expressions can occur *)
     | Compare of expr (* left *)
             * cmpop list (* ops *)
@@ -96,8 +86,6 @@ and expr =
     | JoinedStr of expr list (* values *)
     | Bytes of string (* s *)
     | NameConstant of singleton (* value *)
-    | Ellipsis
-(*    | Constant of constant (* value *) *)
     (* The following expression can appear in assignment context *)
     | Attribute of expr (* value *)
             * identifier (* attr *)
@@ -105,11 +93,7 @@ and expr =
     | Subscript of expr (* value *)
             * slice (* slice *)
             * expr_context (* ctx *)
-    | Starred of expr (* value *)
-            * expr_context (* ctx *)
     | Name of identifier (* id *)
-            * expr_context (* ctx *)
-    | List of expr list (* elts *)
             * expr_context (* ctx *)
     | Tuple of expr list (* elts *)
             * expr_context (* ctx *)
@@ -154,14 +138,12 @@ and operator =
     | BitOr
     | BitXor
     | BitAnd
-    | FloorDiv
 
 and unaryop =
     | Invert
     | Not
     | UAdd
     | USub
-    | WidgetId
 
 and cmpop = 
     | Eq
@@ -175,16 +157,12 @@ and cmpop =
     | In
     | NotIn
 
-and comprehension = expr (* target *) 
-        * expr (* iter *)
-        * expr list (* ifs *)
-
 and arguments = arg list (* args *)
         * arg option (* vararg *)
         * arg list (* kwonlyargs *)
         * expr list (* kw_defaults *)
         * arg option (* kwarg *)
-        * expr list (* defaults *)
+        * expr list (* defaults. empty defaults are Null *)
 
 and arg = identifier (* arg *)
         * expr option (* annotation *)
@@ -201,7 +179,6 @@ and letitem = expr (* assign target *) * expr option (* assign source *)
 and number = 
     | Int of int
     | Float of float
-    | Imag of string
 
 and singleton = 
     | True
