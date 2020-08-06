@@ -65,7 +65,7 @@ let rec zip_calls op vals =
     match vals with
     | [] -> (Ident "()")
     | [a] -> a
-    | h :: t -> Call_ident (op, [h; (zip_calls op t)], [])
+    | h :: t -> Call ((Ident op), [h; (zip_calls op t)], [])
 
 let get_string = function
     | Str s -> s
@@ -76,19 +76,19 @@ let rec zip_compare loc l ops comps =
     | [], [] -> l
     | _, [] -> fail loc "unbalanced comparators"
     | [], _ -> fail loc "unbalanced comparators"
-    | oh :: ot, ch :: ct -> Call_ident (
-        (cmp_op_ident l),
+    | oh :: ot, ch :: ct -> Call (
+        (loc, (Ident (cmp_op_ident l))),
         [ch; (zip_compare loc oh ot ct)],
         [])
 
 let rec compile_expr loc expr =
-    match expr with
+    (loc, match expr with
     | BoolOp (op, vals) -> zip_calls (boolop_ident op) (List.map (compile_expr loc) vals)
-    | BinOp (l, op, r) -> Call_ident (
-        (op_ident op),
+    | BinOp (l, op, r) -> Call (
+        (loc, (Ident (op_ident op))),
         [(compile_expr loc l); (compile_expr loc r)],
         [])
-    | UnaryOp (op, v) -> Call_ident ((op_ident op), [(compile_expr loc v)], [])
+    | UnaryOp (op, v) -> Call((loc, (Ident (op_ident op))), [(compile_expr loc v)], [])
     | IfExp (test, t, f) -> If ((compile_expr loc test),
                                 (compile_expr loc t),
                                 (Some (compile_expr loc f)))
@@ -103,7 +103,7 @@ let rec compile_expr loc expr =
     | Num (Float n) -> Float n
     | Num (Int n) -> Int n
     | Str s -> String s
-    | FormattedValue (v, _conversion, args) -> Call_ident ("Printf.sprintf",
+    | FormattedValue (v, _conversion, args) -> Call ((loc, (Ident "Printf.sprintf")),
         ((compile_expr loc v) :: (List.map (compile_expr loc) args)), [])
     | JoinedStr strs -> Cons ("^", (List.map (compile_expr loc) strs))
     | Bytes s -> String s
@@ -122,19 +122,36 @@ let rec compile_expr loc expr =
         let step = match step with
         | Some v -> (Cons "Some" [(compile_expr loc v)])
         | None -> (Ident "None") in
-        Call_ident ("Libshoots.Prelude.slice",
+        Call ((Ident "Libshoots.Prelude.slice"),
             [(compile_expr loc v); lower; upper; step], [])
     | Name (id, Load) -> (Ident id)
     | Tuple (items, Load) -> Tuple (List.map (compile_expr loc) items)
     | Null -> fail loc "hit Null expr"
+    )
 
+and maybe_compile_expr loc v = 
+    match v with
+    | None -> None
+    | Some v -> compile_expr loc v
 
 and compile_pat loc v = 
     match v with
-    | Attribute (value, id, Store) -> Attr_lookup (compile_expr loc value) id
+    | Attribute (value, id, Store) -> Attr_lookup (compile_pat loc value) id
     | Name (id, Store) -> Name id
     | Tuple (elts, Store) -> Tuple (List.map (compile_pat loc) elts)
+    | Subscript (v, (lower, upper, None), Load) -> Slice ((compile_pat loc v), (
+        (maybe_compile_pat loc lower),
+        (maybe_compile_pat loc upper),
+        None))
+    | Num (Int v) -> Int v
+    | Num (Float v) -> Float v
+    | String v -> String v
     | _ -> fail loc "Non-assignment expression in assignment context"
+
+and maybe_compile_pat loc v =
+    match v with
+    | None -> None
+    | Some v -> (compile_pat loc v)
 
 and with_decorators loc decorators body = 
     match decorators with
@@ -161,24 +178,35 @@ and fun_tree loc args body =
     | [] -> (compile_expr loc body)
     | h :: t -> (Fun1 h (fun_tree loc t body))
 
+and compile_fun loc ctx args body = 
+    match args with 
+    | [] -> (loc, (Do (List.map (compile_stmt ctx body))))
+    | arg :: args -> (loc, 
+        match arg with
+        | Name (s, _) -> (Fun1 (Nolabel, (Name s), None, (compile_fun loc ctx args body)))
+        | Attribute (value, attr, _) -> Fun1 (
+            (Labelled attr), (Name s), (compile_expr ctx value), (compile_fun loc ctx args body))
+        | Tuple (vals, _) -> Fun1 (Nolabel, (Tuple (List.map (compile_pat loc) vals)) 
+            None, (compile_fun loc ctx args body))
+
 and compile_stmt ctx statements = 
     match statements with 
     | [] -> (Ident "()")
     | (loc, v) :: rst -> 
-    match v with 
+    (loc, match v with 
     | FunctionDef (name, [], body, decorators, _return_typ) ->
             (Let ((Name name), 
                   (with_decorators loc decorators (Fun0 (compile_expr loc body))))
                 (compile_stmt ctx rst))
     | FunctionDef (name, args, body, decorators, _return_typ) ->
             (Let ((Name name)
-                  (with_decorators loc recorators (fun_tree loc (arg_pats loc args) body))))
+                  (with_decorators loc decorators (compile_fun loc ctx args body))))
     | Widget (spec, _args, params, body) ->
             Widget spec
                 (List.map (fun (id, v) -> (id, compile_pat loc v)) params) 
                 (compile_stmt ctx body)
     | For (target, iter, body) -> 
-            (Call_ident "Libshoots.Prelude._for" [
+            (Call (Ident "Libshoots.Prelude._for") [
                 (Cons ("[]", []))
                 (fun_tree loc (arg_pats loc [iter]) body);
                 (compile_expr loc target)] [])
@@ -202,4 +230,9 @@ and compile_stmt ctx statements =
                                     | None -> None
                                     | Some msg -> Some (compile_expr loc msg))
     | Expr expr -> compile_expr loc expr
+    )
+
+and compile_cst path tree = 
+    let ctx = create_ctx path in 
+    (ctx, (Do (List.map (compile_stmt ctx) tree)))
 

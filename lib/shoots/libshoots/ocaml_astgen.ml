@@ -1,260 +1,77 @@
 open Ppxlib.Ast_builder.Default
 open Parsetree
 
-let rec extract_requires tree =
-    match tree with 
-    | [] -> res 
-    | Require r :: t -> r :: (extract_requires t)
+(* we could use Parsing.Parse.longident here but it's declared unstable *)
+let make_ident s =
+    match String.split_on_char '.' s with
+    | [] -> (Lident "()")
+    | [a] -> (Lident a)
+    | frst :: rst -> List.fold_left (fun res s -> (Ldot res s)) (Lident frst) rst
 
-let do_expr exprs = 
-    List.fold_left pexp_sequence exprs
+let int_const i = 
+    (Pconst_integer ((int_to_string i), None))
 
-exception SyntaxError of (string * Location.t)
+let rec compile_expr ctx (loc, expr) = 
+    match expr with
+    | Do [expr] -> compile_expr ctx expr
+    | Do expr :: exprs -> List.fold_left
+        (fun res x -> pexp_sequence ~loc res (compile_expr ctx x))
+        (compile_expr ctx expr) exprs
+    | Do [] -> pexp_construct ~loc (Lident "()")
+    | Int v -> pexp_constant ~loc (int_const v)
+    | Float v -> pexp_constant ~loc (Pconst_float ((float_to_string v), None))
+    | String v -> pexp_constant ~loc (Pconst_string v)
+    | Ident s -> pexp_ident ~loc (make_ident s)
+    | Call (op, args, kwargs) ->
+            let args = List.map (fun v -> Nolabel (compile_expr ctx v)) args in 
+            let op = compile_expr ctx op in
+            let kwargs = List.map 
+                (fun (k, v) -> Labelled (k, (compile_expr ctx v))) kwargs in
+            pexp_apply ~loc op (args @ kwargs)
+    | Field_lookup (k, target) -> pexp_field ~loc (compile_expr ctx target) (make_ident k)
+    | Cons (op, []) -> pexp_construct ~loc (make_ident op) None
+    | Cons (op, [v]) -> pexp_construct ~loc (make_ident op) (Some (compile_expr ctx v))
+    | Cons (op, h :: vs) -> let op = make_ident op in 
+        List.fold_left
+            (fun res v -> pexp_construct ~loc op Some (compile_expr ctx v, res))
+            (compile_expr ctx h) vs
+    | Fun0 body -> pexp_fun ~loc Nolabel None (ppat_any ~loc) (compile_expr ctx body)
+    | Tuple items -> pexp_tuple ~loc (List.map (compile_expr ctx) items)
+    | Record pairs -> pexp_record ~loc 
+        (List.map (fun (k, v) -> ((make_ident k), (compile_expr ctx v))) pairs)
+        None
+    | If (cond, t, f) -> pexp_ifthenelse ~loc 
+        (compile_expr ctx cond)
+        (compile_expr ctx t)
+        match f with
+        | None -> None
+        | Some v -> Some (compile_expr ctx v)
+    | Widget (_, _, v) -> [%expr Libshoots.Prelude.make_widget (fun () -> [%e (compile_expr loc v) ])  ]
+    | Let (binds, body) -> pexp_let ~loc Nonrecursive 
+        (List.map 
+            (fun (pat, expr) -> value_binding ~loc
+                (compile_pat loc pat)
+                (compile_expr loc expr))
+            binds)
+        body
 
-let pp_exceptions () = begin
-    Location.register_error_of_exn (function
-        | SyntaxError (msg, loc) ->
-                Some (Location.error ~loc msg)
-        | _ ->
-                None
-    );
-    Printexc.register_printer (function exn ->
-        try
-            ignore (Format.flush_str_formatter ());
-            Location.report_exception Format.str_formatter exn;
-            Some (Format.flush_str_formatter ());
-        with _ ->
-            None
-    );
-end
-
-let fail_loc msg loc = raise SyntaxError (msg, loc)
-let warn_loc _msg _loc = ()
-
-let ast_unit = pexp_ident "()"
-let ast_cons = pexp_ident "::"
-
-let cons_expr loc l r = 
-    pexp_construct ~loc ast_cons (pexp_tuple ~loc [l; r]) in
-
-let list_literal loc exprs = 
-    List.fold_right (cons_expr loc) (pexp_construct ~loc (pexp_ident "[]")) exprs
-
-module type UICompiler = sig
-    val make_widget : string -> arg list -> Parsetree.expression
-    val prelude : Parsetree.expression
-end
-
-module Pat = struct
-    let mk ?(loc = !default_loc) ?(attrs = []) d =
-        {
-            ppat_desc = d;
-            ppat_loc = loc;
-            ppat_loc_stack = [];
-            ppat_attributes = attrs;
-        }
-    let attr d a = {d with ppat_attributes = d.ppat_attributes @ [a]}
-
-    let any ?loc ?attrs () = mk ?loc ?attrs Ppat_any
-    let var ?loc ?attrs a = mk ?loc ?attrs (Ppat_var a)
-    let alias ?loc ?attrs a b = mk ?loc ?attrs (Ppat_alias (a, b))
-    let constant ?loc ?attrs a = mk ?loc ?attrs (Ppat_constant a)
-    let interval ?loc ?attrs a b = mk ?loc ?attrs (Ppat_interval (a, b))
-    let tuple ?loc ?attrs a = mk ?loc ?attrs (Ppat_tuple a)
-    let construct ?loc ?attrs a b = mk ?loc ?attrs (Ppat_construct (a, b))
-    let variant ?loc ?attrs a b = mk ?loc ?attrs (Ppat_variant (a, b))
-    let record ?loc ?attrs a b = mk ?loc ?attrs (Ppat_record (a, b))
-    let array ?loc ?attrs a = mk ?loc ?attrs (Ppat_array a)
-    let or_ ?loc ?attrs a b = mk ?loc ?attrs (Ppat_or (a, b))
-    let constraint_ ?loc ?attrs a b = mk ?loc ?attrs (Ppat_constraint (a, b))
-    let type_ ?loc ?attrs a = mk ?loc ?attrs (Ppat_type a)
-    let lazy_ ?loc ?attrs a = mk ?loc ?attrs (Ppat_lazy a)
-    let unpack ?loc ?attrs a = mk ?loc ?attrs (Ppat_unpack a)
-    let open_ ?loc ?attrs a b = mk ?loc ?attrs (Ppat_open (a, b))
-    let exception_ ?loc ?attrs a = mk ?loc ?attrs (Ppat_exception a)
-    let extension ?loc ?attrs a = mk ?loc ?attrs (Ppat_extension a)
-end
-
-module Make(UI : UICompiler) = struct
-
-    let rec num_to_parsetree loc n =
-        match n with
-        | Int n -> Pconst_integer ((int_to_string n), None)
-        | Float n -> Pconst_float ((float_to_string n), None)
-
-    and op_ident op =
-        match op with
-        | Add -> pexp_ident "+"
-        | Sub -> pexp_ident "-"
-        | StringFmt -> evar "Printf.sprintf"
-        | Mult -> pexp_ident "*"
-        | MatMult -> pexp_ident "*"
-        | Div -> pexp_ident "/"
-        | Mod -> pexp_ident "mod"
-        | Pow -> pexp_ident "**"
-        | LShift -> pexp_ident "lsl"
-        | RShift -> pexp_ident "lsr"
-        | BitOr -> pexp_ident "lor"
-        | BitXor -> pexp_ident "lxor"
-        | BitAnd -> pexp_ident "land"
-
-    and unary_op_ident op = 
-        match op with
-        | Invert -> pexp_ident "lnot"
-        | Not -> pexp_ident "not"
-        | UAdd -> pexp_ident "~+"
-        | USub -> pexp_ident "~-"
-
-    and bin_op_to_parsetree loc (l, op, r) = 
-        let l = expr_to_parsetree loc l in 
-        let r = expr_to_parsetree loc r in 
-        let op = op_ident op in 
-        pexp_apply ~loc op [(Nolabel, l); (Nolabel, r)]
-
-    and unary_op_to_parsetree loc (op, expr) =
-        let op = unary_op_ident op in 
-        let expr = expr_to_parsetree loc expr in 
-        pexp_apply ~loc op [(Nolabel, expr)]
-
-    and and_all exprs =
-        List.fold_right 
-            (fun res e -> pexp_apply ~loc (op_ident And) 
-                [(Nolabel, res); (Nolabel, e)])
-            (List.hd exprs) (List.tl exprs)
-
-    and compare_to_parsetree loc (left, ops, comps) = 
-        let rec iter res ops comps = 
-            if ops == [] then res else
-                let op :: ops = ops in 
-                let comp :: comps = comps in 
-                pexp_apply ~loc (comp_op_ident op) [
-                    (Nolabel, res); (Nolabel, (iter res ops comps))] in
-        iter left ops comps
-
-    and call_to_parsetree loc (func, args, keywords) = 
-        let func = expr_to_parsetree loc func in 
-        let args = List.map (fun v -> (Nolabel, expr_to_parsetree loc v)) args in 
-        let keywords = List.map 
-            (fun (k, v) -> ((Labelled k), (expr_to_parsetree loc v)))
-            keywords in 
-        pexp_apply ~loc func (args @ keywords)
-
-    (* multi-arg functions are really, actually curried single-arg functions *)
-
-    and arg_pat loc arg = 
-        match arg with
-        | None, (Name (vname, _)) -> ppat_var ~loc vname
-        | None, (Tuple (elts, _)) -> ppat_tuple ~loc (List.map (arg_pat loc) elts)
-        | Some id, default -> ppat_var ~loc id 
-
-    and arg_id loc arg = 
-        match arg with 
-        | None, _ -> Nolabel
-        | Some id, _ -> Optional id
-
-    and function_decl loc args body = 
-        match args with 
-        | [] -> pexp_fun ~loc
-                    Nolabel
-                    (ppat_construct ~loc "()" None)
-                    (cst_to_parsetree body)
-        | [a] -> pexp_fun ~loc
-                    (arg_id loc a)
-                    (arg_pat loc a)
-                    (cst_to_parsetree body)
-        | h :: t -> pexp_fun ~loc
-                        (arg_id loc h)
-                        (arg_pat loc h)
-                        (function_decl loc t body)
-
-    and let_binding loc bindings body = 
-        pexp_let ~loc Nonrecursive 
-            (List.map
-                (fun (k, v) -> 
-                    (value_binding ~loc
-                        (arg_pat loc k)
-                        (expr_to_parsetree loc v)))
-                bindings)
-            (cst_to_parsetree body)
+    | Fun1 (arg_label, pat, default, body) -> pexp_fun ~loc 
+        arg_label
+        (match default with
+        | None -> None
+        | Some v -> (compile_expr loc v))
+        (compile_pat loc pat)
+        (compile_expr loc body)
 
 
-    and keyword_to_parsetree loc (id, expr) = (id, (expr_to_parsetree loc expr))
-
-    and expr_to_parsetree loc expr =
-        match expr with 
-        | BoolOp _ -> fail_loc "Hit bool op at wrong point (compiler bug)" loc
-        | BinOp v -> bin_op_to_parsetree loc v 
-        | UnaryOp v -> unary_op_to_parsetree loc v
-        | IfExp (cond, t, f) -> pexp_ifthenelse ~loc:loc
-            (expr_to_parsetree loc cond)
-            (expr_to_parsetree loc t)
-            (Some (expr_to_parsetree loc f))
-        | Dict (ks, vs) -> list_literal loc (
-            List.map2 (fun k v ->
-                pexp_tuple ~loc [(expr_to_parsetree loc k); (expr_to_parsetree loc v)]) ks vs)
-        | Set items -> list_literal loc (List.map (expr_to_parsetree loc) items)
-        | Compare v -> compare_to_parsetree loc v
-        | Call v -> call_to_parsetree loc v
-        | Num n -> num_to_parsetree loc n
-        | Str s -> (Pconst_string s None)
-        | JoinedStr parts -> join_op (pexp_ident "^") loc parts
-        | Bytes s -> (Pconst_string s None)
-        | NameConstant True -> pexp_construct ~loc (pexp_ident "true")
-        | NameConstant False -> pexp_construct ~loc (pexp_ident "false")
-        | NameConstant SNone -> pexp_construct ~loc (pexp_ident "()")
-        | Attribute _ -> fail_loc "Inappropriate attribute" loc
-        | Subscript _ -> fail_loc "Inappropriate subscript" loc
-        | Name (id, Load) -> pexp_desc ~loc (pexp_ident id)
-        | Name (id, Param) -> (Pconst_string id None)
-        | Name (_id, _) -> fail_loc "Invalid name context" loc
-        | List (els, Load) -> list_literal loc (List.map (expr_to_parsetree loc) els)
-        | List (_, _) -> fail_loc "List literal not load (should be impossible)" loc
-        | Tuple (els, Load) -> pexp_tuple ~loc (List.map (expr_to_parsetree loc) els)
-        | Tuple (_, _) -> fail_loc "Tuple literal not load (impossible)" loc
-        | Null -> fail_loc "Unknown parse error" loc
-
-    and assert_to_parsetree loc v =
-        pexp_assert ~loc:loc (expr_to_parsetree loc v)
-
-    and fdef_to_parsetree widget_gen loc (name, args, body, decorators, returns) next = 
-        if returns != None then fail_loc "stub of a return statement appeared" loc;
-        let args = arguments_to_ppat loc args in 
-        let body = List.map (stmt_to_parsetree widget_gen loc) body in 
-        let_binding loc name
-            (List.fold_left (fun res (e, args) -> function_call e args @ [res])
-                (function_decl args body)
-                decorators)
-            (stmt_to_parsetree next)
-
-    and let_to_parsetree loc (items, body) = 
-        let_binding loc items (List.map (stmt_to_parsetree loc) body)
-
-    and stmt_to_parsetree stmts = 
-        match stmts with
-        | [] -> pexp_construct ast_unit None
-        | (loc, stmt) :: t ->
-            match stmt with 
-            | Widget spec, args, props, children -> 
-                    UI.make_widget spec name
-                        (List.map expr_to_parsetree loc args) 
-                        (List.map keyword_to_parsetree loc props) begin
-                        match children with
-                        | None -> None
-                        | Some v -> Some (List.map stmt_to_parsetree v)
-                    end
-            | FunctionDef func -> fdef_to_parsetree widget_gen loc func t
-            | For f -> for_to_parsetree loc f t
-            | If f -> if_to_parsetree loc f t
-            | Let f -> let_to_parsetree loc f t
-            | Assert v -> assert_to_parsetree loc v t
-            | Require _ -> stmt_to_parsetree t (* we already parsed these *)
-            | ImportFrom _ -> stmt_to_parsetree t (* TODO: parse these in prev pass *)
-            | Expr e -> pexp_sequence ~loc (expr_to_parsetree loc e) (stmt_to_parsetree t)
-            | Break -> fail_loc "Break must be in a for loop" loc
-            | Continue -> fail_loc "Continue must be in a for loop" loc
-
-    let cst_to_parsetree (inp:Cst.stmt list) = 
-        let requires = extract_requires inp in 
-        pexp_sequence UI.prelude (stmt_to_parsetree inp)
-
-end
+and compile_pat loc pat = 
+    match pat with
+    | Name s -> ppat_var ~loc s
+    | Tuple vs -> ppat_tuple ~loc (List.map (compile_ppat loc) vs)
+    | Attr_lookup (target, attr) -> ppat_record ~loc 
+        [((make_ident attr), (compile_pat loc target))]
+    | Slice (target, ((Int start), (Int stop), None)) -> ppat_interval ~loc
+        (int_const start) (int_const stop)
+    | Int of i -> ppat_constant ~loc (int_const i)
+    | Float of f -> ppat_constant ~loc (Pconst_float ((float_to_string f), None))
+    | String of s -> ppat_constant ~loc (Pconst_string s)
