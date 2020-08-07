@@ -97,6 +97,9 @@ and expr =
             * expr_context (* ctx *)
     | Tuple of expr list (* elts *)
             * expr_context (* ctx *)
+    | List of expr list (* elts *)
+            * expr_context (* ctx *)
+
     | Null (* should raise an error if accessed *)
 
 

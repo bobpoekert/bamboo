@@ -159,8 +159,13 @@ and with_decorators loc decorators body =
     | h :: t -> Call (compile_expr loc h) [(with_decorators loc t)] []
 
 and compile_type loc expr = 
-    | Name n -> Ident n
-    | Call (Name n), args, _ -> (Parameterized n (List.map (compile_type loc) args))
+    | UnaryOp (Invert, Name n) -> Meta n
+    | Name n -> Const (n, [])
+    | Call (Name n), args, _ -> (Const (n, (List.map (compile_type loc) args)))
+    | Slice (Name n), (Tuple args, _, _) -> (Const (n, (List.map (compile_type loc) args)))
+    | Slice (Name n), (arg, _, _) -> (Const (n, [(compile_type loc arg)]))
+    | Tuple args -> (Tuple (List.map (compile_type loc) args))
+    | List args -> (List (List.map (compiletype loc) args))
     | _ -> fail loc "not a valid type declaration"
 
 and arg_pats loc (args, vargs, kwargs, kw_defaults, vkwarg, defaults) =
@@ -176,7 +181,7 @@ and arg_pats loc (args, vargs, kwargs, kw_defaults, vkwarg, defaults) =
 and fun_tree loc args body = 
     match args with
     | [] -> (compile_expr loc body)
-    | h :: t -> (Fun1 h (fun_tree loc t body))
+    | h :: t -> (Fun1 (h, (fun_tree loc t body)))
 
 and compile_fun loc ctx args body = 
     match args with 

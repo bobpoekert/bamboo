@@ -13,18 +13,19 @@ and function_arg_label =
     | Labelled of string
     | Optional of string
 
-and slice = (pat option (* start *) * 
-             pat option (* stop *) * 
-             pat option (* step *))
+and slice = (typed_pat option (* start *) * 
+             typed_pat option (* stop *) * 
+             typed_pat option (* step *))
 
 and typ = 
-    | Ident of string
-    | Metavar of string
-    | Parameterized of (string * typ list)
+    | Meta of string
+    | Const of (string, typ list)
+    | Tuple of typ list
+    | List of typ list
 
-and typed_pat = (typ * pat)
+and typed_pat = (typ option * pat)
 
-and binding = (pat * expr)
+and binding = (typed_pat * expr)
 
 and keyword = (string * expr)
 
@@ -34,7 +35,7 @@ and widget_spec =
     | Widget_cls of identifier
 
 and func = (function_arg_label *
-            pat *
+            typed_pat *
             expr option (* default *) * 
             expr (* body *))
 

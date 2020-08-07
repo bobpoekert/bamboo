@@ -31,3 +31,11 @@ let slice slicee lower upper step =
         else let h :: t = v in (iter (ctr + 1) (h :: res) t) in
     List.reverse (iter 0 [] slicee)
 
+(* this is just a stub, 
+ * there should be a compiler pass that rewrites Widget's to other things so this never gets called *)
+let make_widget guid f = {
+    args = ();
+    constructor_guid = guid;
+    result = None;
+    construct = f;
+}

@@ -1,6 +1,8 @@
 open Ppxlib.Ast_builder.Default
 open Parsetree
 
+let widget_ctr = ref 0
+
 (* we could use Parsing.Parse.longident here but it's declared unstable *)
 let make_ident s =
     match String.split_on_char '.' s with
@@ -46,7 +48,9 @@ let rec compile_expr ctx (loc, expr) =
         match f with
         | None -> None
         | Some v -> Some (compile_expr ctx v)
-    | Widget (_, _, v) -> [%expr Libshoots.Prelude.make_widget (fun () -> [%e (compile_expr loc v) ])  ]
+    | Widget (_, _, v) -> [%expr Libshoots.Prelude.make_widget 
+        [%e let v = !widget_ctr in incr widget_ctr; v]
+        (fun () -> [%e (compile_expr loc v) ])  ]
     | Let (binds, body) -> pexp_let ~loc Nonrecursive 
         (List.map 
             (fun (pat, expr) -> value_binding ~loc
@@ -63,9 +67,15 @@ let rec compile_expr ctx (loc, expr) =
         (compile_pat loc pat)
         (compile_expr loc body)
 
+and compile_type loc typ = 
+    match typ with
+    | Meta s -> ptyp_var ~loc s
+    | Const (s, vs) -> ptyp_constr ~loc (make_ident s) (List.map (compile_type loc) vs)
+    | Tuple vs -> ptyp_tuple ~loc (List.map (compile_type loc) vs)
+    | List vs -> ptyp_construct ~loc (Lident "::") (List.map (compile_type loc) vs)
 
-and compile_pat loc pat = 
-    match pat with
+and compile_pat loc (typ, pat) = 
+    let untyped = match pat with
     | Name s -> ppat_var ~loc s
     | Tuple vs -> ppat_tuple ~loc (List.map (compile_ppat loc) vs)
     | Attr_lookup (target, attr) -> ppat_record ~loc 
@@ -74,4 +84,7 @@ and compile_pat loc pat =
         (int_const start) (int_const stop)
     | Int of i -> ppat_constant ~loc (int_const i)
     | Float of f -> ppat_constant ~loc (Pconst_float ((float_to_string f), None))
-    | String of s -> ppat_constant ~loc (Pconst_string s)
+    | String of s -> ppat_constant ~loc (Pconst_string s) in
+    match typ with 
+    | None -> untyped
+    | Some t -> ppat_constraint ~loc untyped (compile_type loc typ)
