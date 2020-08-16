@@ -172,7 +172,6 @@ rule token = parse
     | "."                       { [DOT] }
     | ";"                       { [SEMICOL] }
     | "="                       { [EQ] }
-    | "->"                      { [ARROW] }
     (* Numbers *)
     | integer as i              { [INT (int_of_string i)] }
     | floatnumber as f          { [FLOAT (float_of_string f)] }
@@ -313,7 +312,6 @@ and long_dq_prefix = parse
         | IDENT s -> "IDENT " ^ s ^" "
         | INT i -> "INT " ^ (string_of_int i) ^ " "
         | FLOAT f-> "FLOAT "^ (string_of_float f) ^ " "
-        | IMAG s-> "IMAG " ^ s ^ " "
         | STR s-> "STR " ^ s ^ " "
         | BYTES s -> "BYTES " ^ s ^" "
         
@@ -328,7 +326,6 @@ and long_dq_prefix = parse
         | MUL -> "MUL "
         | POW -> "POW "
         | DIV -> "DIV "
-        | TDIV -> "TDIV "
         | MOD -> "MOD "
         | AT -> "AT "
         
@@ -361,7 +358,6 @@ and long_dq_prefix = parse
         | DOT -> "DOT "
         | SEMICOL -> "SEMICOL "
         | EQ -> "EQ "
-        | ARROW -> "ARROW "
         
         | FALSE -> "FALSE "
         | TRUE -> "TRUE "

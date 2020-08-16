@@ -48,7 +48,7 @@ SOFTWARE.*
 %token EOF
 
 (* Operators *)
-%token ADD SUB MUL POW DIV TDIV MOD
+%token ADD SUB MUL POW DIV MOD
 %token AT SHARP
 %token LSHIFT RSHIFT BITAND BITOR BITXOR BITNOT
 %token LT GT LE GE EQUAL NEQ
@@ -61,7 +61,7 @@ SOFTWARE.*
 
 (* Delimiters *)
 %token LPAR RPAR LSQ RSQ LBRACE RBRACE
-%token COMMA COLON DOT SEMICOL EQ ARROW
+%token COMMA COLON DOT SEMICOL EQ
 
 (* List of tokens for keywords *)
 
@@ -94,70 +94,9 @@ nl_stmt_list:
 ;
 
 funcdef:
-    | DEF name parameters COLON suite 
-        { FunctionDef($2, $3, $5, [], None) }
-    | DEF name parameters ARROW test COLON suite 
-        { FunctionDef($2, $3, $7, [], Some $5) }
+    | DEF name LPAR arglist RPAR COLON suite 
+        { FunctionDef($2, fst $4, snd $4, $7) }
 ;
-
-parameters:
-    | LPAR typedargslist RPAR  { $2 }
-    | LPAR typedargslist COMMARPAR  { $2 }
-;
-
-typedargslist:
-   | { [], (None : arg option), [], [], (None : arg option), [] }
-   | tfpdef { [$1], (None : arg option), [], [], (None : arg option), [Null] }
-   | tfpdef EQ test { [$1], (None : arg option), [], [], (None : arg option), [$3] }
-   | tfpdef COMMA typedargslist {
-       match $3 with (a, va, kwon, kwdef, kwa, def) ->
-       ($1 :: a, va, kwon, kwdef, kwa, Null :: def)
-       }   
-   | tfpdef EQ test COMMA typedargslist {
-       match $5 with (a, va, kwon, kwdef, kwa, def) ->
-       ($1 :: a, va, kwon, kwdef, kwa, $3 :: def)
-    }
-   | MUL tfpvarargs { match $2 with (va, kwon, kwdef, kwa) ->
-        ( [], va, kwon, kwdef, kwa, [] ) }
-   | POW tfpdef     { ([], (None : arg option), [], [], Some $2, []) }
-;
-
-tfpdef:
-    | name { ($1, (None : expr option)) }
-    | name COLON test { ($1, Some $3) }
-;
-
-tfpvarargs:
-    | tfpdef tfpkwonly_args { 
-        match $2 with (kwonly, kwdef, kwargs) ->
-        (Some $1, kwonly, kwdef, kwargs) }
-    | COMMA tfpdef tfpkwonly_args {
-            match $3 with (kwonly, kwdef, kwarg) ->
-            ((None : arg option), $2 :: kwonly, Null :: kwdef, kwarg)
-        }
-    | COMMA tfpdef EQ test tfpkwonly_args {
-        match $5 with (kwonly, kwdef, kwarg) ->
-            ((None : arg option), $2 :: kwonly, $4 :: kwdef, kwarg)
-        }
-;        
-
-tfpkwonly_args:
-    | COMMA tfpdef tfpkwonly_args { match $3 with
-            ( kwonly, kwdef, kwarg) ->
-            ($2 :: kwonly, Null :: kwdef, kwarg)
-        }
-    | COMMA tfpdef EQ test tfpkwonly_args {
-        match $5 with (kwonly, kwdef, kwarg) ->
-            ($2 :: kwonly, $4 :: kwdef, kwarg)
-        }
-    | COMMA tfpkwargs { ([], [], Some $2) }
-    | { [], [], (None : arg option) }
-;
-
-tfpkwargs:
-    POW tfpdef { $2 }
-;
-
 
 stmt:
     | simple_stmt { $1 : stmt list } 
@@ -181,6 +120,7 @@ inner_small_stmt:
     | widget_small { $1 }
 ;    
 
+
 expr_stmt:
     | testlist_star_expr    { Expr $1 }
 ;
@@ -188,7 +128,6 @@ expr_stmt:
 
 test_starexpr:
     | test      { $1 }
-    | star_expr { $1 }
 ;
 
 testlist_star_expr:
@@ -349,9 +288,6 @@ test:
     | or_test IF or_test ELSE test  { IfExp($3, $1, $5) }
 ;
 
-test_nocond:
-    | or_test           { $1 }
-;    
 
 or_test:
     | separated_nonempty_list(OR, and_test) { match $1 with
@@ -435,7 +371,6 @@ term_op:
     | AT    { MatMult }
     | DIV   { Div }
     | MOD   { Mod }
-    | TDIV  { FloorDiv }
 ;    
 
 factor:
@@ -447,7 +382,6 @@ factor_op:
     | ADD       { UAdd }
     | SUB       { USub }
     | BITNOT    { Invert }
-    | SHARP     { WidgetId }
 ;
             
 power:
@@ -491,7 +425,6 @@ atom_tuple:
         | [s] -> s
         | l -> Tuple(l, Load) }
     | LPAR separated_nonempty_list(COMMA, test_starexpr) COMMARPAR   { Tuple($2, Load) }
-    | LPAR test comp_for RPAR   { GeneratorExp($2, $3) }
 ;
 
 (* Iterable cannot be used in comprehension : Star_expr forbidden *)
@@ -499,16 +432,13 @@ atom_list:
     | LSQ RSQ               { List ([], Load) }
     | LSQ separated_nonempty_list(COMMA, test_starexpr) RSQ { List ($2, Load) }
     | LSQ separated_nonempty_list(COMMA, test_starexpr) COMMARSQ { List ($2, Load) }
-    | LSQ test comp_for RSQ { ListComp($2, $3) }
 ;
 
 (* Iterable cannot be used in comprehension : Star_expr forbidden *)
 atom_dict:
     | LBRACE RBRACE                 { Dict ([], []) }
-    | LBRACE test COLON test comp_for RBRACE  { DictComp ($2, $4, $5) }
     | LBRACE dict_elts  RBRACE      { Dict (fst $2, snd $2) }
     | LBRACE dict_elts  COMMARBRA   { Dict (fst $2, snd $2) }
-    | LBRACE test comp_for RBRACE   { SetComp($2, $3) }
     | LBRACE separated_nonempty_list(COMMA, test_starexpr) RBRACE  { Set $2 } 
     | LBRACE separated_nonempty_list(COMMA, test_starexpr) COMMARBRA  { Set $2 } 
 ;
@@ -553,6 +483,7 @@ testlist:
 
 dict_elts:
     | test COLON test  { [$1], [$3] }
+    | name EQ test { [Str $1], [$3] }
     | POW expr         { [Null], [$2] }
     | test COLON test COMMA dict_elts   { $1 :: (fst $5), $3 :: (snd $5)  }
     | POW expr COMMA dict_elts   { Null :: (fst $4), $2 :: (snd $4) }
@@ -570,25 +501,8 @@ arglist:
 
 argument:
     | test          { ([$1], [] ) } 
-    | test comp_for { ([GeneratorExp($1, $2)], []) }
-    | name EQ test  { ([], [(Some $1, $3)]) }
-    | POW test      { ([], [((None : identifier option), $2)]) }
-    | MUL test      { ([$2], []) }
+    | name EQ test  { ([], [($1, $3)]) }
 ;    
-
-comp_for:
-    | nonempty_list(comp_for1)    { $1 }  
-;
-
-comp_for1:
-    | FOR exprlist IN or_test list(comp_if) { match $2 with
-        | [s] -> (s, $4, $5)
-        | l -> (Tuple(l, Store), $4, $5) }
-;          
-
-comp_if:
-    IF test_nocond  { $2 }
-;
 
 
 name:

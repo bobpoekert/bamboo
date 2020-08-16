@@ -31,10 +31,9 @@ and widget = (widget_spec list * expr list * keyword list * stmt list option)
 
 and inner_stmt =
     | FunctionDef of identifier (* name *)
-            * arguments (* args *)
+            * expr list (* args *)
+            * keyword list (* kwargs *)
             * stmt list (* body *)
-            * expr list (* decorator list *)
-            * expr option (* return type *)
     | Widget of widget
     | For of expr (* target *)
             * expr (* iter *)
@@ -160,18 +159,8 @@ and cmpop =
     | In
     | NotIn
 
-and arguments = arg list (* args *)
-        * arg option (* vararg *)
-        * arg list (* kwonlyargs *)
-        * expr list (* kw_defaults *)
-        * arg option (* kwarg *)
-        * expr list (* defaults. empty defaults are Null *)
-
-and arg = identifier (* arg *)
-        * expr option (* annotation *)
-
 (* keyword arguments supplied to call (NULL identifier for **kwargs) *)
-and keyword = identifier option (* arg *)
+and keyword = identifier (* arg *)
         * expr (* value *)
 
 (* import name with optional 'as' alias *)

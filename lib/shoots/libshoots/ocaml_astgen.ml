@@ -1,5 +1,7 @@
 open Ppxlib.Ast_builder.Default
 open Parsetree
+open Asttypes
+open Longident
 
 let widget_ctr = ref 0
 
@@ -8,10 +10,10 @@ let make_ident s =
     match String.split_on_char '.' s with
     | [] -> (Lident "()")
     | [a] -> (Lident a)
-    | frst :: rst -> List.fold_left (fun res s -> (Ldot res s)) (Lident frst) rst
+    | frst :: rst -> List.fold_left (fun res s -> (Ldot (res, s))) (Lident frst) rst
 
 let int_const i = 
-    (Pconst_integer ((int_to_string i), None))
+    (Pconst_integer ((string_of_int i), None))
 
 let rec compile_expr ctx (loc, expr) = 
     match expr with
@@ -45,9 +47,9 @@ let rec compile_expr ctx (loc, expr) =
     | If (cond, t, f) -> pexp_ifthenelse ~loc 
         (compile_expr ctx cond)
         (compile_expr ctx t)
-        match f with
+        (match f with
         | None -> None
-        | Some v -> Some (compile_expr ctx v)
+        | Some v -> Some (compile_expr ctx v))
     | Widget (_, _, v) -> [%expr Libshoots.Prelude.make_widget 
         [%e let v = !widget_ctr in incr widget_ctr; v]
         (fun () -> [%e (compile_expr loc v) ])  ]
@@ -66,13 +68,14 @@ let rec compile_expr ctx (loc, expr) =
         | Some v -> (compile_expr loc v))
         (compile_pat loc pat)
         (compile_expr loc body)
+    | Variant v -> pexp_variant ~loc v None
 
 and compile_type loc typ = 
     match typ with
-    | Meta s -> ptyp_var ~loc s
-    | Const (s, vs) -> ptyp_constr ~loc (make_ident s) (List.map (compile_type loc) vs)
-    | Tuple vs -> ptyp_tuple ~loc (List.map (compile_type loc) vs)
-    | List vs -> ptyp_construct ~loc (Lident "::") (List.map (compile_type loc) vs)
+    | Meta_type s -> ptyp_var ~loc s
+    | Const_type (s, vs) -> ptyp_constr ~loc (make_ident s) (List.map (compile_type loc) vs)
+    | Tuple_type vs -> ptyp_tuple ~loc (List.map (compile_type loc) vs)
+    | List_type vs -> ptyp_construct ~loc (Lident "::") (List.map (compile_type loc) vs)
 
 and compile_pat loc (typ, pat) = 
     let untyped = match pat with
@@ -82,9 +85,9 @@ and compile_pat loc (typ, pat) =
         [((make_ident attr), (compile_pat loc target))]
     | Slice (target, ((Int start), (Int stop), None)) -> ppat_interval ~loc
         (int_const start) (int_const stop)
-    | Int of i -> ppat_constant ~loc (int_const i)
-    | Float of f -> ppat_constant ~loc (Pconst_float ((float_to_string f), None))
-    | String of s -> ppat_constant ~loc (Pconst_string s) in
+    | Int i -> ppat_constant ~loc (int_const i)
+    | Float f -> ppat_constant ~loc (Pconst_float ((float_to_string f), None))
+    | String s -> ppat_constant ~loc (Pconst_string s) in
     match typ with 
     | None -> untyped
     | Some t -> ppat_constraint ~loc untyped (compile_type loc typ)

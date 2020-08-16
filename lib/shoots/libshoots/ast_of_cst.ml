@@ -1,12 +1,62 @@
 open Ast
 open Cst
 
+exception Compile_error of (Ppxlib.Location.t option * string)
+
+let try_finalize f x finally y =
+   let res = try f x with exn -> finally y; raise exn in
+   finally y;
+       res
+
+module AC = struct 
+
+    let cur_loc : Ppxlib.Location.t option ref = ref None
+
+    let with_loc (loc : Ppxlib.Location.t) f = 
+        let prev_loc = !cur_loc in begin
+            cur_loc := Some loc;
+            try_finalize f () (fun () -> cur_loc := prev_loc) ()
+        end
+
+    let construct v = 
+        match !cur_loc with
+        | None -> raise (Failure "tried to construct ast node from outside with_loc block")
+        | Some loc -> (loc, v)
+
+    let call op args kwargs = construct (Ast.Call (op, args, kwargs))
+    let field_lookup field v = construct (Ast.Field_lookup (field, v))
+    let cons h t = construct (Ast.Cons (h, t))
+    let let_ binds body = construct (Ast.Let (binds, body))
+    let def k v = construct (Ast.Def (k, v))
+    let fun0 body = construct (Ast.Fun0 body)
+    let fun1 func = construct (Ast.Fun1 func)
+    let string_ s = construct (Ast.String s)
+    let int_ i = construct (Ast.Int i)
+    let float_ f = construct (Ast.Float f)
+    let widget spec params children = construct (Ast.Widget (spec, params, children))
+    let tuple vs = construct (Ast.Tuple vs)
+    let record items = construct (Ast.Record items)
+    let if_ cond t f = construct (Ast.If (cond, t, f))
+    let do_ vs = match vs with 
+    | [v] -> v
+    | vs -> construct (Ast.Do vs)
+    let ident k = construct (Ast.Ident k)
+    let variant k = construct (Ast.Variant k)
+    let assert_ t k = construct (Ast.Assert (t, k))
+
+    let fail msg = raise (Compile_error (!cur_loc, msg))
+
+end
+
+let fail_noassign () = AC.fail "variable assignment is not supported (by design)"
+
 (*outer wrapper: pstr_module (module_binding (pmod_unpack expr)) *)
 
-type compile_context = {
-    val imports : string list ref;
-    val requires : string list ref;
-    val filepath : string;
+
+type 'a stmt_ctx = {
+    imports: 'a list ref;
+    requires: string list ref;
+    filepath: string;
 }
 
 let create_ctx path = {
@@ -15,14 +65,19 @@ let create_ctx path = {
     filepath=path;
 }
 
-let resolve_import filepath (aliases, from, level) = 
+let call_unit fname = AC.(call (ident fname) [(ident "()")] [])
 
+let tuple_to_list (v : Cst.expr option) = 
+    match v with
+    | Some (Tuple (elts, _ctx)) -> elts
+    | None -> []
+    | Some v -> [v]
 
 let add_require ctx s =
-    ctx.requires <- s :: !(ctx.requires)
+    ctx.requires := (s :: !(ctx.requires))
 
 let add_import ctx i = 
-    ctx.imports <- (resolve_import ctx.filepath i) :: !(ctx.imports)
+    ctx.imports := ((ctx.filepath, i) :: !(ctx.imports))
 
 let boolop_ident = function
     | And -> "&&"
@@ -61,181 +116,184 @@ let cmp_op_ident = function
     | In -> "Libshoots.Prelude.list_contains"
     | NotIn -> "Libshoots.Prelude.list_not_contains"
 
-let rec zip_calls op vals = 
+let rec zip_calls op (vals : Ast.expr list) = 
     match vals with
-    | [] -> (Ident "()")
+    | [] -> (AC.ident "()")
     | [a] -> a
-    | h :: t -> Call ((Ident op), [h; (zip_calls op t)], [])
+    | h :: t -> AC.(call (ident op) [h; (zip_calls op t)] [])
 
 let get_string = function
     | Str s -> s
-    | _ -> raise (Failure "expected string, got something else")
+    | Name (s, _) -> s
+    | _ -> AC.fail "expected string or identifier, got something else"
 
-let rec zip_compare loc l ops comps = 
+
+
+let rec compile_expr expr : Ast.expr =
+    match expr with
+    | BoolOp (op, vals) -> zip_calls
+        (boolop_ident op)
+        (List.map compile_expr vals)
+    | BinOp (l, op, r) -> AC.(call
+        (ident (op_ident op))
+        [(compile_expr l); (compile_expr r)]
+        [])
+    | UnaryOp (op, v) -> AC.(call (ident (unary_op_ident op)) [(compile_expr v)] [])
+    | IfExp (test, t, f) -> AC.if_ (compile_expr test)
+                                (compile_expr t)
+                                (Some (compile_expr f))
+    | Dict (ks, vs) -> AC.record
+        (List.map2 (fun k v -> ((get_string k), (compile_expr v))) ks vs)
+    | Set elts -> AC.(cons "::" (List.map compile_expr elts))
+    | Compare (l, (ops : Cst.cmpop list), comparators) -> zip_compare l ops comparators
+    | Call (func, args, kwargs) -> AC.call 
+        (compile_expr func)
+        (List.map compile_expr args)
+        (List.map compile_keyword kwargs)
+    | Num (Float n) -> AC.float_ n
+    | Num (Int n) -> AC.int_ n
+    | Str s -> AC.string_ s
+    | FormattedValue (v, _conv, args) -> AC.(call
+        (ident "Printf.sprintf") 
+        ((compile_expr v) :: (List.map compile_expr (tuple_to_list args))) [])
+    | JoinedStr strs -> AC.cons "^" (List.map compile_expr strs)
+    | Bytes s -> AC.string_ s
+    | NameConstant v -> begin match v with 
+        | True -> AC.ident "true"
+        | False -> AC.ident "false"
+        | SNone -> AC.ident "()"
+    end
+    | Attribute (v, attr, Load) -> AC.field_lookup attr (compile_expr v)
+    | Subscript (v, Slice (lower, upper, step), Load) ->
+        AC.(let lower = match lower with
+            | Some v -> (cons "Some" [(compile_expr v)])
+            | None -> (ident "None") in
+            let upper = match upper with
+            | Some v -> (cons "Some" [(compile_expr v)])
+            | None -> (ident "None") in 
+            let step = match step with
+            | Some v -> (cons "Some" [(compile_expr v)])
+            | None -> (ident "None") in
+            call (ident "Libshoots.Prelude.slice")
+                [(compile_expr v); lower; upper; step] []
+        )
+    | Name (id, Load) -> (AC.ident id)
+    | Tuple (items, Load) -> AC.tuple (List.map compile_expr items)
+    | Null -> AC.fail "hit Null expr"
+    | List (elts, Load) -> AC.cons "::" (List.map compile_expr elts)
+    | Name (_id, (Store|Del|AugLoad|AugStore)) -> fail_noassign ()
+    | List (_id, (Store|Del|AugLoad|AugStore)) -> fail_noassign ()
+    | Tuple (_id, (Store|Del|AugLoad|AugStore)) -> fail_noassign ()
+
+and zip_compare l (ops : Cst.cmpop list) comps : Ast.expr= 
     match (ops, comps) with
-    | [], [] -> l
-    | _, [] -> fail loc "unbalanced comparators"
-    | [], _ -> fail loc "unbalanced comparators"
-    | oh :: ot, ch :: ct -> Call (
-        (loc, (Ident (cmp_op_ident l))),
-        [ch; (zip_compare loc oh ot ct)],
-        [])
-
-let rec compile_expr loc expr =
-    (loc, match expr with
-    | BoolOp (op, vals) -> zip_calls (boolop_ident op) (List.map (compile_expr loc) vals)
-    | BinOp (l, op, r) -> Call (
-        (loc, (Ident (op_ident op))),
-        [(compile_expr loc l); (compile_expr loc r)],
-        [])
-    | UnaryOp (op, v) -> Call((loc, (Ident (op_ident op))), [(compile_expr loc v)], [])
-    | IfExp (test, t, f) -> If ((compile_expr loc test),
-                                (compile_expr loc t),
-                                (Some (compile_expr loc f)))
-    | Dict (ks, vs) -> Record
-        (List.map2 (fun k v -> ((get_string k), (compile_expr loc v))) ks vs)
-    | Set elts -> Cons ("::", (List.map (compile_expr loc) elts))
-    | Compare (l, ops, comparators) -> zip_compare loc l ops (List.map (compile_expr loc) comparators)
-    | Call (func, args, kwargs) -> Call (
-        (compile_expr loc func),
-        (List.map (compile_expr loc) args),
-        (List.map (compile_expr loc) kwargs))
-    | Num (Float n) -> Float n
-    | Num (Int n) -> Int n
-    | Str s -> String s
-    | FormattedValue (v, _conversion, args) -> Call ((loc, (Ident "Printf.sprintf")),
-        ((compile_expr loc v) :: (List.map (compile_expr loc) args)), [])
-    | JoinedStr strs -> Cons ("^", (List.map (compile_expr loc) strs))
-    | Bytes s -> String s
-    | NameConstnt v -> match v with 
-        | True -> (Ident "true")
-        | False -> (Ident "false")
-        | SNone -> (Ident "()")
-    | Attribute (v, attr, Load) -> Field_lookup (attr, (compile_expr loc v))
-    | Subscript (v, (lower, upper, step), Load) ->
-        let lower = match lower with
-        | Some v -> (Cons "Some" [(compile_expr loc v)])
-        | None -> (Ident "None") in
-        let upper = match upper with
-        | Some v -> (Cons "Some" [(compile_expr loc v)])
-        | None -> (Ident "None") in 
-        let step = match step with
-        | Some v -> (Cons "Some" [(compile_expr loc v)])
-        | None -> (Ident "None") in
-        Call ((Ident "Libshoots.Prelude.slice"),
-            [(compile_expr loc v); lower; upper; step], [])
-    | Name (id, Load) -> (Ident id)
-    | Tuple (items, Load) -> Tuple (List.map (compile_expr loc) items)
-    | Null -> fail loc "hit Null expr"
+    | [], [] -> (compile_expr l)
+    | _, [] -> AC.fail "unbalanced comparators"
+    | [], _ -> AC.fail "unbalanced comparators"
+    | oh :: ot, ch :: ct -> AC.(
+        call (ident (cmp_op_ident oh)) [(compile_expr l); (zip_compare ch ot ct)] []
     )
 
-and maybe_compile_expr loc v = 
+and maybe_compile_expr v = 
     match v with
     | None -> None
-    | Some v -> compile_expr loc v
+    | Some v -> Some (compile_expr v)
 
-and compile_pat loc v = 
+and compile_keyword (k, v) = (k, compile_expr v)
+
+and compile_pat v : pat= 
     match v with
-    | Attribute (value, id, Store) -> Attr_lookup (compile_pat loc value) id
-    | Name (id, Store) -> Name id
-    | Tuple (elts, Store) -> Tuple (List.map (compile_pat loc) elts)
-    | Subscript (v, (lower, upper, None), Load) -> Slice ((compile_pat loc v), (
-        (maybe_compile_pat loc lower),
-        (maybe_compile_pat loc upper),
+    | Attribute (value, id, Store) -> Attr_lookup_pat ((compile_pat value), id)
+    | Name (id, Store) -> Name_pat id
+    | Tuple (elts, Store) -> Tuple_pat (List.map compile_pat elts)
+    | Subscript (v, Slice (lower, upper, None), Load) -> Slice_pat ((compile_pat v), (
+        (maybe_compile_pat lower),
+        (maybe_compile_pat upper),
         None))
-    | Num (Int v) -> Int v
-    | Num (Float v) -> Float v
-    | String v -> String v
-    | _ -> fail loc "Non-assignment expression in assignment context"
+    | Num (Int v) -> Int_pat v
+    | Num (Float v) -> Float_pat v
+    | Str v -> String_pat v
+    | _ -> AC.fail "Invalid destructuring"
 
-and maybe_compile_pat loc v =
+and maybe_compile_pat v : pat option=
     match v with
     | None -> None
-    | Some v -> (compile_pat loc v)
+    | Some v -> Some (compile_pat v)
 
-and with_decorators loc decorators body = 
-    match decorators with
-    | [] -> body
-    | h :: t -> Call (compile_expr loc h) [(with_decorators loc t)] []
+and compile_fun_arg label (default : Ast.expr option) (arg : Cst.expr) (body : Ast.expr) = 
+    match arg with
+    | Name (s, _) -> (AC.fun1 (label, (Name_pat s), default, body))
+    | Tuple (vals, _ctx) -> AC.fun1 (label, (Tuple_pat (List.map compile_pat vals)), 
+        default, body)
+    | _ -> AC.fail "invalid destructuring"
 
-and compile_type loc expr = 
-    | UnaryOp (Invert, Name n) -> Meta n
-    | Name n -> Const (n, [])
-    | Call (Name n), args, _ -> (Const (n, (List.map (compile_type loc) args)))
-    | Slice (Name n), (Tuple args, _, _) -> (Const (n, (List.map (compile_type loc) args)))
-    | Slice (Name n), (arg, _, _) -> (Const (n, [(compile_type loc arg)]))
-    | Tuple args -> (Tuple (List.map (compile_type loc) args))
-    | List args -> (List (List.map (compiletype loc) args))
-    | _ -> fail loc "not a valid type declaration"
+and compile_fun ctx 
+        (args : Cst.expr list)
+        (kwargs : Cst.keyword list)
+        (body : Cst.stmt list) : Ast.expr = 
+    match (args, kwargs) with 
+    | [], [] -> (AC.do_ (List.map (compile_stmt ctx) body))
+    | [], (name, v) :: kwargs -> compile_fun_arg
+        (Labelled name) (Some (compile_expr v)) (Cst.Name (name, Load))
+        (compile_fun ctx [] kwargs body)
+    | arg :: args, _ -> compile_fun_arg Nolabel None arg 
+        (compile_fun ctx args kwargs body)
 
-and arg_pats loc (args, vargs, kwargs, kw_defaults, vkwarg, defaults) =
-    let mapper tag = 
-        (fun (name, typ) default -> 
-            match default with 
-            | Null -> (compile_type typ, tag name)
-            | default -> (compile_type typ, Default ((tag name), (compile_expr loc default)))) in
-    let args_pats = List.map2 (mapper Name) args defaults in 
-    let kwarg_pats = List.map2 (mapper Label) kwargs kw_defaults in 
-    args_pats @ kwarg_pats
+and maybe_compile_stmts ctx s = 
+    match s with 
+    | None -> []
+    | Some v -> List.map (compile_stmt ctx) v
 
-and fun_tree loc args body = 
-    match args with
-    | [] -> (compile_expr loc body)
-    | h :: t -> (Fun1 (h, (fun_tree loc t body)))
-
-and compile_fun loc ctx args body = 
-    match args with 
-    | [] -> (loc, (Do (List.map (compile_stmt ctx body))))
-    | arg :: args -> (loc, 
-        match arg with
-        | Name (s, _) -> (Fun1 (Nolabel, (Name s), None, (compile_fun loc ctx args body)))
-        | Attribute (value, attr, _) -> Fun1 (
-            (Labelled attr), (Name s), (compile_expr ctx value), (compile_fun loc ctx args body))
-        | Tuple (vals, _) -> Fun1 (Nolabel, (Tuple (List.map (compile_pat loc) vals)) 
-            None, (compile_fun loc ctx args body))
-
-and compile_stmt ctx statements = 
-    match statements with 
-    | [] -> (Ident "()")
-    | (loc, v) :: rst -> 
-    (loc, match v with 
-    | FunctionDef (name, [], body, decorators, _return_typ) ->
-            (Let ((Name name), 
-                  (with_decorators loc decorators (Fun0 (compile_expr loc body))))
-                (compile_stmt ctx rst))
-    | FunctionDef (name, args, body, decorators, _return_typ) ->
-            (Let ((Name name)
-                  (with_decorators loc decorators (compile_fun loc ctx args body))))
-    | Widget (spec, _args, params, body) ->
-            Widget spec
-                (List.map (fun (id, v) -> (id, compile_pat loc v)) params) 
-                (compile_stmt ctx body)
-    | For (target, iter, body) -> 
-            (Call (Ident "Libshoots.Prelude._for") [
-                (Cons ("[]", []))
-                (fun_tree loc (arg_pats loc [iter]) body);
-                (compile_expr loc target)] [])
-    | Break -> (Ident "Break")
-    | Continue -> (Ident "Continue")
-    | If (test, body, els) -> 
-            (If
-                (compile_expr loc test)
-                (compile_stmt ctx body)
-                (compile_stmt ctx els))
-    | Let (items, body) ->
-            let bindings = List.map 
-                (fun (target, src) -> (compile_pat loc pat, compile_expr loc src))
-                items in 
-            (Let (bindings, (compile_stmt ctx body)))
-    | Require s -> add_require ctx s
-    | Import aliases -> add_import ctx aliases None None; (Ident "()")
-    | ImportFrom (from, aliases, level) -> add_import ctx from aliases level; (Ident "()")
-    | Assert (test, msg) -> Assert (compile_expr loc test,
-                                    match msg with 
-                                    | None -> None
-                                    | Some msg -> Some (compile_expr loc msg))
-    | Expr expr -> compile_expr loc expr
+and compile_stmt ctx statement = 
+    let loc, statement = statement in
+    AC.with_loc loc (fun () -> 
+        match statement with 
+        | FunctionDef (name, [], [], body) -> AC.(
+            def (Name_pat name) (fun0 (do_ (List.map (compile_stmt ctx) body)))
+        )
+        | FunctionDef (name, args, kwargs, body) -> AC.(
+            def (Name_pat name) (compile_fun ctx args kwargs body)
+        )
+        | Widget (spec, _args, params, body) ->
+                AC.widget spec
+                    (List.map (fun (id, v) -> (id, compile_expr v)) params)
+                    (maybe_compile_stmts ctx body)
+        | For (target, iter, body) -> 
+                AC.(call (ident "Libshoots.Prelude.for_") [
+                    (cons "[]" []);
+                    (compile_fun ctx [iter] [] body);
+                    (compile_expr target)
+                ] [])
+        | Break -> (call_unit "Libshoots.Prelude.break_")
+        | Continue -> (call_unit "Libshoots.Prelude.continue_")
+        | If (test, body, els) -> 
+                (AC.if_
+                    (compile_expr test)
+                    (compile_stmts ctx body)
+                    (match els with 
+                    | [] -> None
+                    | els -> Some (compile_stmts ctx els)))
+        | Let (items, body) ->
+                let rec mk_bindings res items = 
+                    match items with 
+                    | [] -> res
+                    | (_, None) :: t -> mk_bindings res t
+                    | (target, Some src) :: t -> mk_bindings (
+                        (compile_pat target, compile_expr src) :: res) t in
+                (AC.let_ (mk_bindings [] items) (compile_stmts ctx body))
+        | Require s -> add_require ctx s; AC.ident "()"
+        | Import aliases -> add_import ctx aliases; (AC.ident "()")
+        | ImportFrom (_from, aliases, _level) -> add_import ctx aliases;
+            (AC.ident "()")
+        | Assert (test, msg) -> AC.assert_ (compile_expr test)
+                                        (match msg with 
+                                        | None -> None
+                                        | Some msg -> Some (compile_expr msg))
+        | Expr expr -> compile_expr expr
     )
+
+and compile_stmts ctx stmts = 
+    (AC.do_ (List.map (compile_stmt ctx) stmts))
 
 and compile_cst path tree = 
     let ctx = create_ctx path in 

@@ -1,11 +1,17 @@
 
-let rec _for res mapper data = 
+exception Break
+exception Continue
+
+let break_ () = raise Break
+let continue_ () = raise Continue
+
+let rec for_ res mapper data = 
     match data with 
-    | [] -> res
-    | h :: t -> match (mapper h) with
-    | Break -> res
-    | Continue -> (_for res mapper data)
-    | v -> (_for (v :: res) mapper data)
+    | [] -> List.rev res
+    | h :: t -> (try (for_ ((mapper h) :: res) mapper data) with
+        | Break -> List.rev res
+        | Continue -> (for_ res mapper t)
+    )
 
 let rec list_contains v l = 
     match l with
@@ -28,8 +34,10 @@ let slice slicee lower upper step =
         else if (match step with 
                 | None -> false
                 | Some c -> ctr mod c != 0) then (iter (ctr + 1) res (List.tl v))
-        else let h :: t = v in (iter (ctr + 1) (h :: res) t) in
-    List.reverse (iter 0 [] slicee)
+        else match v with
+        | [] -> res
+        | h :: t -> (iter (ctr + 1) (h :: res) t) in
+    List.rev (iter 0 [] slicee)
 
 (* this is just a stub, 
  * there should be a compiler pass that rewrites Widget's to other things so this never gets called *)
