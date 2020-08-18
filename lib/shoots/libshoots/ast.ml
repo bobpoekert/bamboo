@@ -22,7 +22,7 @@ and func = (function_arg_label *
             expr (* body *))
 
 and inner_expr = 
-    | Call of (expr (* op *) * expr list (* args *) * keyword list (* kwargs *))
+    | Call of (string (* op *) * expr list (* args *) * keyword list (* kwargs *))
     | Field_lookup of (string * expr)
     | Cons of (string (* op *) * expr list (* elems *))
     | Let of (binding list * expr)

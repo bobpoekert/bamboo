@@ -65,7 +65,7 @@ let create_ctx path = {
     filepath=path;
 }
 
-let call_unit fname = AC.(call (ident fname) [(ident "()")] [])
+let call_unit fname = AC.(call fname [(ident "()")] [])
 
 let tuple_to_list (v : Cst.expr option) = 
     match v with
@@ -120,7 +120,7 @@ let rec zip_calls op (vals : Ast.expr list) =
     match vals with
     | [] -> (AC.ident "()")
     | [a] -> a
-    | h :: t -> AC.(call (ident op) [h; (zip_calls op t)] [])
+    | h :: t -> AC.(call op [h; (zip_calls op t)] [])
 
 let get_string = function
     | Str s -> s
@@ -135,10 +135,10 @@ let rec compile_expr expr : Ast.expr =
         (boolop_ident op)
         (List.map compile_expr vals)
     | BinOp (l, op, r) -> AC.(call
-        (ident (op_ident op))
+        (op_ident op)
         [(compile_expr l); (compile_expr r)]
         [])
-    | UnaryOp (op, v) -> AC.(call (ident (unary_op_ident op)) [(compile_expr v)] [])
+    | UnaryOp (op, v) -> AC.(call (unary_op_ident op) [(compile_expr v)] [])
     | IfExp (test, t, f) -> AC.if_ (compile_expr test)
                                 (compile_expr t)
                                 (Some (compile_expr f))
@@ -147,14 +147,14 @@ let rec compile_expr expr : Ast.expr =
     | Set elts -> AC.(cons "::" (List.map compile_expr elts))
     | Compare (l, (ops : Cst.cmpop list), comparators) -> zip_compare l ops comparators
     | Call (func, args, kwargs) -> AC.call 
-        (compile_expr func)
+        (get_name func)
         (List.map compile_expr args)
         (List.map compile_keyword kwargs)
     | Num (Float n) -> AC.float_ n
     | Num (Int n) -> AC.int_ n
     | Str s -> AC.string_ s
     | FormattedValue (v, _conv, args) -> AC.(call
-        (ident "Printf.sprintf") 
+        "Printf.sprintf" 
         ((compile_expr v) :: (List.map compile_expr (tuple_to_list args))) [])
     | JoinedStr strs -> AC.cons "^" (List.map compile_expr strs)
     | Bytes s -> AC.string_ s
@@ -174,7 +174,7 @@ let rec compile_expr expr : Ast.expr =
             let step = match step with
             | Some v -> (cons "Some" [(compile_expr v)])
             | None -> (ident "None") in
-            call (ident "Libshoots.Prelude.slice")
+            call "Libshoots.Prelude.slice"
                 [(compile_expr v); lower; upper; step] []
         )
     | Name (id, Load) -> (AC.ident id)
@@ -191,7 +191,7 @@ and zip_compare l (ops : Cst.cmpop list) comps : Ast.expr=
     | _, [] -> AC.fail "unbalanced comparators"
     | [], _ -> AC.fail "unbalanced comparators"
     | oh :: ot, ch :: ct -> AC.(
-        call (ident (cmp_op_ident oh)) [(compile_expr l); (zip_compare ch ot ct)] []
+        call (cmp_op_ident oh) [(compile_expr l); (zip_compare ch ot ct)] []
     )
 
 and maybe_compile_expr v = 
@@ -259,7 +259,7 @@ and compile_stmt ctx statement =
                     (List.map (fun (id, v) -> (id, compile_expr v)) params)
                     (maybe_compile_stmts ctx body)
         | For (target, iter, body) -> 
-                AC.(call (ident "Libshoots.Prelude.for_") [
+                AC.(call "Libshoots.Prelude.for_" [
                     (cons "[]" []);
                     (compile_fun ctx [iter] [] body);
                     (compile_expr target)

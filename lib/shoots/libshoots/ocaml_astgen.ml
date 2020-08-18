@@ -5,6 +5,13 @@ open Longident
 module Ah = Ast_helper
 module L = Location
 
+let try_finalize f x finally y =
+   let res = try f x with exn -> finally y; raise exn in
+   finally y;
+       res
+
+let function_whitelist = ref (fun v -> v)
+
 let collect_defs tree = 
     let defs = ref [] in begin
         Ast.trasnform (fun loc node -> 
@@ -18,7 +25,7 @@ let rec compile_expr (loc, v) =
     let module E = Ah.Exp in 
     match v with 
     | Call (op, args, kws) -> E.apply ~loc:loc 
-        (compile_expr op)
+        (E.ident ~loc:loc (L.mkloc (Lident (!function_whitelist op)) loc))
         (List.map (fun e -> (Nolabel, (compile_expr e))) args)
         (List.map (fun (k, e) -> (Labelled k, (compile_expr e))) kws)
     | Field_lookup (k, e) -> E.field ~loc:loc
@@ -81,11 +88,16 @@ and construct loc op elems =
     | h :: t -> E.construct ~loc:loc op 
         (E.tuple ~loc:loc [(compile_expr h); (construct loc op t)])
 
-let structure_of_expr (loc, (k, e)) = Ah.Str.value Nonrecursive 
-    [(Ah.Vb.mk ~loc:loc (Ah.Pat.var k) e)]
+let structure_of_expr wh (loc, (k, e)) = 
+    let old_whitelist = !function_whitelist in
+    function_whitelist := wh;
+    try_finalize (fun () ->
+        Ah.Str.value Nonrecursive 
+            [(Ah.Vb.mk ~loc:loc (Ah.Pat.var k) e)])
+        () (fun () -> function_whitelist := old_witelist) ()
 
-let compile_module module_name tree = 
+let compile_module function_whitelist module_name tree = 
     let defs = collect_defs tree in 
     let defs = List.map (fun (loc, (k, v)) -> (loc, k, (compile_expr v))) defs in 
-    List.map structure_of_expr defs
+    List.map (structure_of_expr function_whitelist) defs
 
