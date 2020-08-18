@@ -40,8 +40,8 @@ static struct custom_operations gcaml_g_value_ops = {
 value alloc_g_value(GType type) {
     value res = caml_alloc_custom(&gcaml_g_value_ops, sizeof(GValue), 0, 1);
     GValue *v = Data_custom_val(res);
-    memset(v, 0, sizeof(GValue));
     if (!v) caml_failwith("out of memory?");
+    memset(v, 0, sizeof(GValue));
     g_value_init(v, type);
     return res;
 }

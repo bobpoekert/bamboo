@@ -1,15 +1,3 @@
-type 'a for_result = Stop | Skip | Result of 'a
-
-let map_for mapper lst =
-    let rec iter res lst = 
-        match lst with 
-        | [] -> res
-        | h :: t -> match (mapper h) with
-            | Stop -> res
-            | Skip -> iter res t
-            | Result v -> iter (v :: res) t
-    List.reverse (iter [] lst)
-
 module type UIToolkit = sig 
     type node_t
 
@@ -29,6 +17,19 @@ module type UIToolkit = sig
 
 
 end
+
+type 'a for_result = Stop | Skip | Result of 'a
+
+let map_for mapper lst =
+    let rec iter res lst = 
+        match lst with 
+        | [] -> res
+        | h :: t -> match (mapper h) with
+            | Stop -> res
+            | Skip -> iter res t
+            | Result v -> iter (v :: res) t in
+    List.rev (iter [] lst)
+
 
 module Make(T : UIToolkit) = struct
     type 'a tree_result = {
